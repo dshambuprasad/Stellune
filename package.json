@@ -1,0 +1,34 @@
+{
+  "name": "cosmophony",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Turn the real stars above a place and date into a calm, looping ambient drone. Runs entirely in the browser.",
+  "keywords": [
+    "sonification",
+    "ambient",
+    "astronomy",
+    "web-audio",
+    "star-catalog",
+    "generative-music"
+  ],
+  "license": "MIT",
+  "homepage": "https://github.com/dshambuprasad/cosmophony",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "build:data": "node scripts/build-data.mjs",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.2",
+    "typescript": "~6.0.2",
+    "vite": "^8.2.0",
+    "vitest": "^4.1.10"
+  },
+  "dependencies": {
+    "tone": "^15.1.22"
+  }
+}

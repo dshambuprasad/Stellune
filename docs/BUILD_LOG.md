@@ -1,0 +1,1135 @@
+# BUILD LOG — Cosmophony (POC-5)
+
+One paragraph per phase: what was built, and the evidence it works. Phases run
+strictly in order, each ending in a halt for review.
+
+---
+
+## Phase 0 — Scaffold & boundaries · 2026-08-01 · ✅ complete, awaiting review
+
+Scaffolded a Vite + TypeScript project in `builds/POC5_Cosmophony/` carrying the
+full three-layer engine skeleton — `engine/model` (`Star`, `ObserverInput`,
+`HorizonStar`, `City`), `engine/mapping` (`MappingConfig`, `TimbreParams`,
+`MusicalEvent`, `MusicalScore`, plus `sonify`, `starsAboveHorizon`, `julianDate`,
+`greenwichMeanSiderealTime` as stubs that `throw new Error("not implemented")`),
+and `engine/audio` (the `AudioEngine` interface and a `createAudioEngine` stub) —
+alongside `instruments/types.ts` (the `Instrument<TInput>` plug-in contract), a
+`birthSky` instrument stub, a reserved-but-empty `instruments/orrery/`, and an
+`app/` shell that renders a placeholder title, tagline, and the honesty label. All
+the type contracts from the build plan exist as real exported interfaces and the
+whole thing typechecks under `strict`. The dependency rule is enforced rather than
+merely documented: `test/boundaries.test.ts` scans the source and fails the suite
+if `model` imports anything at all, if `mapping` imports anything outside
+`../model`, if `mapping` mentions `Tone`/`document`/`window`/`AudioContext`/
+`Math.random`/`Date.now`, or if any layer above `engine/audio` imports Tone
+directly. **Evidence:** `npm run typecheck` (`tsc --noEmit`) exits 0 clean;
+`npm run test` → *Test Files 1 passed (1), Tests 14 passed (14)*; `npm run build`
+→ *6 modules transformed, ✓ built in 91ms*, emitting `dist/index.html` 0.71 kB,
+CSS 0.79 kB, JS 1.31 kB; `npm run dev` serves on `http://localhost:5173` and the
+page was loaded in a real browser — it renders correctly with zero console errors
+(screenshot: `docs/phase0-scaffold.jpg`). The boundary test was also
+negative-tested: temporarily adding `import * as Tone from 'tone'` and
+`document.body` to `engine/mapping/sonify.ts` turned 3 tests red with the right
+messages, and the file was restored — so the guard genuinely bites rather than
+passing vacuously. Tone.js was deliberately **not** installed (Phase 3), no star
+or city data exists yet (Phase 1), and nothing was committed or pushed — the
+README carries copy-paste `git init`/remote/push and GitHub Pages commands for
+Shambu to run himself.
+
+**Decisions made in this phase** (all small, all reversible — flagged for the review gate):
+
+- **`strict: true` and `noUncheckedIndexedAccess` added** to the Vite template's
+  `tsconfig.json`, which ships without them. The mapping layer is the deterministic
+  heart of the project; catching an `undefined` there at compile time is worth the
+  friction.
+- **Stub parameters are underscore-prefixed** (`_stars`, `_config`) because
+  `noUnusedParameters` is on. They get real names when the bodies land.
+- **`.ts` extensions in relative imports**, matching the template's
+  `allowImportingTsExtensions` + `verbatimModuleSyntax` settings.
+- **`base: './'` in `vite.config.ts`** so the build works from any GitHub Pages
+  sub-path without hard-coding a repo name.
+- **`vitest.config` folded into `vite.config.ts`** via `vitest/config` — one config
+  file instead of two.
+- **`@types/node` added as a dev dependency** — the boundary test reads the source
+  tree with `node:fs`. It is dev-only and never reaches the bundle.
+- **The boundary test is a source-text scan, not a module-graph analysis.** It
+  catches the mistakes people actually make (an import statement, a `window.`
+  reference) and is honest in its own doc comment that clever indirection would
+  slip past it.
+- **`instruments/orrery/` holds only a placeholder note**, no TypeScript. The
+  folder makes the Phase 6 boundary visible without pulling any of that work
+  forward.
+
+**Not done, deliberately** (later phases): no star or city data, no astronomy, no
+sonification logic, no Tone.js, no audio, no canvas, no PWA, no export, no orrery
+code, no `docs/LLD.md` (Phase 2, when there is a hard part to describe).
+
+**Blockers:** none.
+
+**◇ REVIEW GATE — Atlas HQ · 2026-08-01 · PASSED → proceed to Phase 1.** Reviewed the
+full scaffold against the build plan. All type contracts match the spec exactly;
+the dependency rule is not just documented but *enforced and negative-tested*
+(`boundaries.test.ts`, 14 green) — and the guard correctly forbids `Math.random`/
+`Date.now`/`new Date()` in the mapping layer, which pre-protects the Phase-2
+determinism requirement. `tsc --noEmit`, `vitest`, and `vite build` all clean; the
+dev page renders calm with the honesty label already in place; README carries the
+copy-paste git + Pages steps and nothing was pushed under Shambu's identity. All
+flagged phase-decisions accepted (strict + noUncheckedIndexedAccess is the right
+call for the deterministic heart). No changes requested. One forward-looking note
+(not a blocker): the toolchain is on very recent majors (Node 25 / Vite 8 / TS 6 /
+vitest 4) — confirm the GitHub Pages deploy path still works at Phase 5.
+
+---
+
+## Phase 1 — Data layer · 2026-08-01 · ✅ complete, awaiting review
+
+Bundled the two datasets the whole project rests on, and made them reproducible
+rather than hand-carried. `scripts/build-data.mjs` (zero dependencies — plain Node
+`fetch`/`zlib`/`crypto`, including a ~40-line ZIP central-directory reader so
+GeoNames needs no unzip binary) downloads **HYG v3.8** and **GeoNames
+`cities15000`**, caches the raw files in the gitignored `scripts/.cache/`, and
+emits `public/data/stars.hyg.subset.json` (773 KB, **8,849 stars**),
+`public/data/cities.json` (138 KB, **1,500 cities across 244 countries**), and a
+**generated** `public/data/ATTRIBUTION.md` carrying source URLs, licences,
+SHA-256 checksums of the inputs, every transform applied, and the access date —
+generated precisely so the honesty claim can never go stale. The critical star
+transform is **RA hours → degrees (×15)**, since HYG stores right ascension in
+hours 0–24 while the `Star` model is degrees throughout. Typed loaders live in
+`src/engine/model/load.ts`, split into pure `parseStarCatalog`/`parseCities`
+validators (testable without a browser, and strict about ranges — a star with
+RA 400 or Dec 120 is rejected rather than silently placed in the wrong part of the
+sky) and thin `loadStarCatalog`/`loadCities` fetch wrappers that raise a `DataError`
+naming the file, the entry index, the field, the value found, and how to fix it.
+The model layer stays dependency-free (`fetch` is a global, not an import), so the
+boundary suite is still green. **Evidence:** `npm run typecheck` clean;
+`npm run test` → **53 passed (53)**, up from 14, covering the real bundled files
+rather than fixtures — count in band (8,849, asserted 8,000–10,000), magnitude
+limit respected, no Sun, unique ids, and spot-checks against published J2000
+values: **Sirius** RA 101.2872° / Dec −16.7161° / mag −1.44 / CMa and brightest in
+the file, **Betelgeuse** RA 88.7929° / Dec +7.4071° / Ori with B–V 1.50 (red, as it
+must be), **Polaris** Dec +89.2641°, **Vega** B–V 0.00; cities resolve correctly —
+**Bengaluru** 12.97 N / 77.59 E / +330 min, **London** 51.51 N / −0.13 E / 0,
+**New York City** 40.71 N / −74.01 E / −300, and **Kathmandu** at **+345** proving
+quarter-hour zones survive. `npm run build` succeeds (13 modules, 4.56 kB JS) and
+copies all three data files into `dist/`. The loaders were also **verified in a
+real browser** — the dev page fetches both catalogues and reports *"Data loaded:
+8,849 naked-eye stars (brightest Sirius, mag -1.44) and 1,500 cities"* with zero
+console errors (screenshot: `docs/phase1-data-loaded.jpg`). Regenerating twice
+produced **byte-identical** output (md5-compared), so the subset is genuinely
+reproducible.
+
+**Two real data problems the tests caught** (both found by assertions written
+before the data was inspected, then fixed in the prep script):
+
+- **HYG lists secondary components of multiple-star systems as separate rows.**
+  Capella's companion sits **13.2 arcseconds** from Capella; 71 such pairs existed
+  under 1 arcminute. Left in, the Phase-2 "brightest N above the horizon"
+  selection would have spent two voices on one visible point of light — musically
+  wasteful and a small lie about what someone would actually see. The script now
+  merges pairs closer than **1 arcminute** (roughly naked-eye resolving power,
+  and this is explicitly the naked-eye catalogue), keeping the brighter member.
+  Deliberately not greedier: **Mizar and Alcor (11.8′) both survive**, and a test
+  asserts both that no pair is closer than 1′ and that those two remain.
+- **GeoNames holds distinct cities sharing a name within one country** (several
+  Suzhous in China, two Gorakhpurs in India). Since the bundled record carries no
+  admin-region field, the picker would show identical-looking rows; the script now
+  keeps the most populous of each name+country pair (1,042 dropped across the
+  source list). The manual latitude/longitude fallback covers the smaller ones.
+
+**Decisions and honest corrections for the review gate:**
+
+- **The build plan calls GeoNames "public-domain". It is not** — GeoNames is
+  **CC BY 4.0**, and HYG v3 is **CC BY-SA 2.5** (Attribution-*ShareAlike*).
+  Recorded accurately in ATTRIBUTION.md and the README instead of repeating the
+  plan's wording. **Practical consequence worth Shambu's eye: the code stays MIT,
+  but redistributing `stars.hyg.subset.json` carries a ShareAlike obligation.**
+  Nothing here blocks the build; it only shapes how the data may be re-shared.
+- **HYG v3.8 rather than "v3"** — the repo's v3 folder ends at v3.8 and `CURRENT/`
+  has moved on to v4.x. v3.8 is the final v3-series release, so it is the closest
+  faithful reading of the plan.
+- **Sirius is mag −1.44 in HYG v3.8**, not the modern published −1.46. The
+  catalogue's value is used as-is (no silent "corrections") and the test asserts
+  −1.45 ± 0.1 with the discrepancy noted in a comment.
+- **The Sun (HYG id 0, mag −26.7) is excluded.** At that brightness it would swamp
+  every other voice, and it is not one of "the stars above you."
+- **1,500 cities, chosen as every country's largest city first, then by global
+  population.** Guarantees the picker is usable everywhere on Earth rather than
+  only in dense regions.
+- **Fixed standard UTC offsets, no DST.** `rawOffset` from GeoNames `timeZones.txt`,
+  preserving fractional zones. A birth moment inside a DST period is off by up to
+  an hour, which rotates the sky by up to ~15°. Stated in ATTRIBUTION.md; the UI
+  must say it too (Phase 4).
+- **ATTRIBUTION.md is generated, not hand-written**, so its access date and counts
+  cannot drift from the data they describe.
+- **The app shell now reports data-load status.** This is Phase-1 evidence that
+  the loaders work over real `fetch`, not a step toward the Phase-4 UI; it gets
+  replaced wholesale by the Birth Sky instrument.
+
+**Not done, deliberately** (later phases): no astronomy — `starsAboveHorizon`,
+`julianDate`, and `greenwichMeanSiderealTime` still throw "not implemented"; no
+sonification, no Tone.js, no audio, no canvas, no PWA, no export, no orrery, no
+`docs/LLD.md`.
+
+**Blockers:** none. Both data sources were open — no login, no payment, no ToS
+obstacle.
+
+**◇ REVIEW GATE — Atlas HQ · 2026-08-01 · PASSED → proceed to Phase 2.** Verified
+against the actual files, not just this log. The bundled `stars.hyg.subset.json`
+was independently checked: the brightest-first ordering is astronomically correct
+(Sirius → Canopus → Arcturus → Rigil Kentaurus → Vega → Capella …), RA is stored in
+degrees, colours are right (Rigel bv −0.03 blue, Betelgeuse 1.50 red, Antares 1.87),
+constellations correct, unnamed stars omit the field rather than nulling it, and
+Sirius sits at RA 101.2872 / Dec −16.7161 matching published J2000. The licensing
+is now correct and version-matched: **HYG v3.8 → CC BY-SA 2.5**, **GeoNames →
+CC BY 4.0**, both recorded in a generated (drift-proof) ATTRIBUTION.md with SHA-256
+of the source files, and the ShareAlike obligation on the star subset is flagged
+— exactly the grounding standard we set. The loader (`load.ts`) is clean: pure
+parse split from fetch, strict range validation (RA 0–360 confirming the hours→deg
+conversion, Dec −90..90, tz −720..840), human-readable `DataError`s, model layer
+still imports nothing. Two real data problems were caught by tests written before
+inspection (double-star merge at 1′ keeping Mizar/Alcor; same-name city dedup) —
+good instinct. Loaders verified in a real browser; regeneration is byte-identical.
+No changes requested. Accepted decisions: HYG v3.8 as the faithful "v3"; Sun
+excluded; 1,500 cities; standard offsets with the DST caveat surfaced for the
+Phase-4 UI to state.
+
+---
+
+## Phase 2 — Mapping layer · 2026-08-01 · ✅ complete, awaiting review
+
+Implemented the deterministic heart. `astro.ts` does the standard Meeus alt/az
+reduction — `dateISO` + `timeMinutes` − `tzOffsetMinutes` → Julian Date → GMST →
+LST = GMST + longitude → hour angle `H = LST − RA` →
+`sin(alt) = sin(dec)sin(lat) + cos(dec)cos(lat)cos(H)`, with azimuth from
+`atan2(−cos(dec)sin(H), sin(dec)cos(lat) − cos(dec)sin(lat)cos(H))` measured from
+north through east. Degrees in and out, radians only inside the trig, sidereal
+time computed **once per call** rather than ~8,800 times. The JD formula is linear
+in the day term, so a local midnight that resolves to the previous UTC day needs
+**no calendar-rollover logic at all** — `d = 32.27` simply means the 1st of the
+next month, which is why UTC+5:30 works without a single special case.
+`sonify.ts` selects the `maxVoices` brightest stars above the horizon and maps
+altitude→pitch (quantized so an off-scale pitch is not unlikely but
+*unrepresentable* — the horizon-to-zenith range is divided into
+`scaleDegrees.length × 3` discrete steps), magnitude→amplitude **linearly in
+decibels** (a magnitude already *is* a log measure of flux, so this is the
+physically faithful mapping; the naked-eye span's natural ~32 dB is gently
+compressed to 24 dB so the faintest star whispers at ~6% instead of vanishing),
+B–V→timbre, azimuth→pan as `0.85·sin(azimuth)` (exactly the east-west component
+of the direction you'd face — east +1, west −1, north/south 0, with natural
+compression near the meridian and no arbitrary curve), and altitude→twinkle from
+**airmass** `1/sin(alt)`, full depth at airmass 5 (~11.5°). A new `scales.ts`
+holds five drone-friendly modes. `docs/LLD.md` documents both modules, the stated
+simplifications with their error magnitudes, every edge case, and the full test
+list. **Evidence:** `npm run typecheck` clean; `npm run test` → **154 passed
+(154)**, up from 53; `npm run build` succeeds. All four gate tests pass —
+**Polaris altitude ≈ latitude** across 7 latitudes × 7 longitudes × 5 dates × 7
+times of day (1,715 distinct skies, all within 1°); **zenith transit** at 8
+latitudes (a star with `dec = latitude` reaches altitude 90.000000 at `H = 0`);
+**circumpolar geometry both ways** — from London no star below `dec = −(90−lat)`
+ever rises and no star above `dec = 90−lat` ever sets, swept over a full day in
+20-minute steps; **every emitted pitch on-scale** across 5 scales × 4 roots × 8
+times of day plus a 0.1°-resolution sweep of the whole altitude range;
+**determinism** by deep-equality on repeated calls, on freshly recomputed skies,
+across a JSON round-trip, and with magnitude ties broken by catalogue id rather
+than array order. The boundary guard was **re-negative-tested against the new
+files**: adding `Math.random()`/`Date.now()` to `astro.ts` and Tone/`document` to
+`scales.ts` turned 4 tests red with the right messages before restoring them.
+
+**Hand-verified against an independent sky** (the worked example is in
+`docs/LLD.md` §3, for the review gate to re-derive). Bengaluru, 1993-08-01
+00:00 IST = 1993-07-31 18:30 UTC → JD 2449200.27083, LST 304.4782° = 20.299 h,
+4,279 of 8,849 stars up. LST 20.3 h means stars near RA 20.3 h are on the
+meridian, so **Altair** (RA 19.85 h, dec +8.87° — almost exactly Bengaluru's
+latitude) must be near the zenith, and it reports **82.2°**. **Deneb** (RA 20.69 h,
+dec +45.3°) sits just east of the meridian and north of the zenith → azimuth
+**7.7°**, nearly due north. **Arcturus** (RA 14.26 h, ~6 h west) is setting at
+altitude **3.7°**, azimuth **288.8°** — and being lowest correctly earns the
+maximum twinkle of **1.000**. Antares and Shaula are in the south-west, Fomalhaut
+rising in the south-east, and **every winter star — Sirius, Betelgeuse, Rigel,
+Capella, Procyon — is below the horizon**, exactly as it must be in August. The
+resulting chord is C3 · G4 · E5 · E3 · A3 · G4 · G3 · G3, all members of A
+minor-pentatonic.
+
+**Decisions and one thing to listen for at the review gate:**
+
+- **`config.seed` is accepted, validated, and unused in v1.** Nothing in the
+  birth-sky mapping needs a random choice — every value derives from the star
+  itself. Flagged rather than quietly dropped; it stays in the contract for
+  instruments that will need it. The "seed any randomness" requirement is
+  therefore satisfied vacuously, and saying so plainly beats inventing randomness
+  to justify the field.
+- **Two stars at the same altitude get the same pitch, deliberately.** They really
+  are at the same height, the unison is consonant by construction, and their
+  different pans and timbres make it read as chorus rather than duplication. The
+  Bengaluru chord has two such pairs.
+- **`starsAboveHorizon` filters rather than returning the whole sky**, so the name
+  tells the truth; `sonify` filters defensively too, so it is correct whatever it
+  is handed. This corrected a Phase-0 stub comment that said the opposite.
+- **A bad config throws; a strange sky does not.** An unknown scale name, a
+  non-positive `loopSeconds` or an out-of-range root are bugs and say so loudly
+  (listing the available scales). A polar winter with nothing overhead is an
+  ordinary sky and returns an ordinary empty score with an honest label.
+- **`meta.label` never mentions place or date** — this layer does not know them,
+  and inventing them here would be the layer overstepping. The instrument
+  prefixes them for display in Phase 4.
+- **Julian Dates near 2.45 million exhaust the double's mantissa** at ~5e-10 days
+  (~40 µs), so two JD tests use 8-decimal tolerances rather than 10. Noted in the
+  test file; it is a property of the number's magnitude, not of the arithmetic.
+- **To listen for in Phase 3:** on the Bengaluru night, five of the eight voices
+  pan left, because the bright stars genuinely sit in the west that evening. It is
+  honest, not a bug — but worth hearing before settling on 0.85 stereo width.
+
+**Not done, deliberately** (later phases): no Tone.js, no audio, no canvas, no UI,
+no export, no PWA, no orrery. `createAudioEngine` still throws "not implemented".
+
+**Blockers:** none.
+
+**◇ REVIEW GATE — Atlas HQ · 2026-08-01 · PASSED → proceed to Phase 3.** The deep
+gate, verified independently rather than on trust. I re-derived the Bengaluru
+1993-08-01 sky with a from-scratch Meeus implementation (not this code): JD
+2449200.27083 identical; **Polaris altitude 12.92° ≈ latitude 12.97°**; Altair
+82.2° near zenith; Deneb az 7.7° (due north); Arcturus 3.7° setting west → twinkle
+1.000; Sirius/Betelgeuse below the horizon — every figure matches. The azimuth
+formula is algebraically identical to the standard atan2 form (the cos(dec)
+factor cancels). Quantization is **provably on-scale** (pitch = root + scale-degree
++ whole octaves, so off-scale is unrepresentable), scale tables are correct, and
+determinism holds (magnitude sort + numeric-id tiebreak, input not mutated, −0
+normalized, rounded). Magnitude→dB, airmass→twinkle and sin(azimuth)→pan checked
+by hand. 154 tests green; boundary guard re-negative-tested against the new
+files. Accepted: seed validated-but-unused in v1 (correct — no randomness to
+seed); equal-altitude unison deliberate; mean (not apparent) sidereal time — my
+independent GMST differed by ~13″ (the omitted equation-of-equinoxes), far below
+the stated ~1°/precession-skipped simplifications. One latent non-issue for later:
+`altitudeToMidi`'s final clamp to 0–127 could in theory yield an off-scale pitch
+only if `rootMidi` were set high enough to overflow 3 octaves — impossible with the
+default A2 root; revisit only if a config ever uses an extreme root. No changes
+requested. **Carry into Phase 3:** listen to the west-panning Bengaluru night
+before settling on 0.85 stereo width.
+
+---
+
+## Phase 3 — Audio-synthesis layer · 2026-08-01 · ✅ complete, awaiting a LISTEN
+
+Added **Tone.js 15.1.22 (MIT)** and built the graph, split deliberately in two so
+the taste is testable: `voicing.ts` is pure and turns a `MusicalScore` into a
+plain `AudioPlan` (frequencies, gains, cutoffs, LFO rates), and `engine.ts` — the
+**only file in the project that imports Tone** — does nothing but wire nodes to
+those numbers. The graph is a drone bed of two oscillators (a 55 Hz sine for
+weight, a detuned triangle an octave up for body) under a filter that opens twice
+per loop, plus one voice per `MusicalEvent`: `Synth(triangle) → lowpass →
+tremolo gain → panner → bus → stereo widener → reverb (9 s) → master → limiter`.
+B–V drives each voice's cutoff as a **multiple of its own fundamental** (so high
+voices are not dulled by an absolute ceiling) — on the sample sky that puts
+Antares, a red supergiant, at a 450 Hz cutoff and Altair at 6242 Hz, which is
+audibly the difference between wooden and glassy. `play()` awaits `Tone.start()`
+and the reverb's impulse response, and must be driven by a user gesture;
+`stop()` releases and ramps the drone down over the same span rather than
+cutting; `dispose()` frees every node. `getLevels()` returns per-voice meters —
+**verified live in the browser**, eight non-zero values ordered by brightness,
+which is the Phase 4 star-glow hook proven early. A dev-only harness
+(`harness.html` + `src/harness/`, absent from the production build, confirmed)
+loads the fixed Bengaluru sky, plays it, and renders a clip offline.
+**Evidence:** typecheck clean, `npm run test` → **183 passed (183)** (up from
+154), `npm run build` succeeds. Clip committed at
+`docs/phase3-bengaluru-1993-08-01.wav` (18 s, 48 kHz stereo, 3.3 MB);
+harness screenshot at `docs/phase3-harness.jpg`.
+
+**Seamless looping is structural, not a crossfade.** Every LFO runs a whole
+number of cycles per `loopSeconds` (twinkle rates 5, 7, 9, 11, 13, 17, 19, 23
+cycles — mutually prime so voices drift against each other rather than pulsing
+together; drone breath 1, filter sweep 2), so at the end of a loop each one is
+exactly where it started. Unit-tested across five loop lengths.
+
+**What the measurements say** (I analysed the rendered WAV; see the honesty note
+below about what this does and does not establish):
+
+| | first render | shipped |
+| --- | --- | --- |
+| peak | −17.8 dBFS | **−7.6 dBFS** |
+| RMS | −29.2 dBFS | **−18.9 dBFS** |
+| stereo balance | −3.43 dB | **−1.02 dB** |
+| clipped samples | 0 | **0** |
+
+Envelope: blooms from −21.5 to −18.5 dBFS over the first ~4 s (the 3.5 s attack),
+then breathes slowly across about 2 dB for the rest of the loop — no pumping.
+Spectral probes at the eight expected pitches all show strong energy, while two
+deliberately **off-scale probes (F3 174.6 Hz, B3 246.9 Hz) sit 47–52 dB down** —
+independent confirmation that Phase 2's quantization holds in the actual audio
+and not merely in the score. Two identical renders were **bit-identical by md5**,
+so the audio is reproducible within a session.
+
+**Three real defects the measurements caught, all fixed:**
+
+- **The drone was inaudible.** Two octaves below A2 is A0 at 27.5 Hz — under the
+  bottom of human hearing and reproduced by essentially no laptop or phone
+  speaker, so the bed would simply have vanished for most listeners. Moved to one
+  octave (A1, 55 Hz), added the body oscillator an octave above it, and added an
+  audibility floor that transposes the bed up a whole octave when a low pitch
+  class (C, D, E…) would otherwise land in the 30 Hz region — the key is
+  unchanged, only the register moves. Pinned by a test across roots 33–72.
+- **The mix was far too quiet.** −29 dBFS RMS against the roughly −20 dBFS that
+  ambient sits at; a listener would have reached for the volume and then been
+  startled by whatever they played next. Master gain recalibrated by measuring a
+  render, not by taste.
+- **`Tone.Limiter` is a glue compressor, not a limiter.** It leaves `knee` at Web
+  Audio's default of 30 dB, so it compresses far below its own threshold — it was
+  taking ~1.8 dB off a mix peaking at −10 dBFS, flattening exactly the slow
+  breathing this piece is made of. Replaced with `Tone.Compressor` at knee 0,
+  which does nothing until a stray peak nears full scale. The breathing in the
+  envelope above is what that fix bought.
+
+**The Phase 2 carry-in, now measured and decided.** Five of the eight voices pan
+left because the bright stars genuinely sat west that night. In the actual render
+this comes out as **−1.02 dB of RMS imbalance** — essentially centred, because
+the drone bed is mono and the 9 s reverb is wide, and together they anchor the
+image. **Decision: keep the mapping layer's 0.85 pan spread and the 0.7 stereo
+width unchanged.** The panning is true to the sky, the measured consequence is
+about one decibel, and narrowing it would have been cosmetic smoothing of
+something real. Ears may still overrule this — that is the phase's gate.
+
+**Honesty note — I have not heard this.** I can measure level, spectrum,
+dynamics, stereo balance and reproducibility, and all of those are now where they
+should be. None of that establishes that it is *beautiful*, which is the actual
+bar. The clip is committed precisely so Atlas HQ and Shambu can judge that.
+Relatedly, **seamlessness is guaranteed by construction and unit-tested, but not
+yet verified by ear across a loop boundary** — a 54 s three-loop render was
+attempted and abandoned when the background tab throttled it past three minutes.
+The committed clip also contains the initial bloom, so it is evidence of the
+sound, not a loop-ready file; producing one is Phase 5's export work.
+
+**What I would deepen, in order:** (1) the voices are a single triangle through a
+lowpass — real bell and glass character wants a second inharmonic partial or a
+short FM index, and that is the biggest available gain in beauty per line of
+code; (2) the attack is uniform at 3.5 s, so the chord arrives as a block —
+staggering entries by magnitude would let the brightest star lead; (3) the drone
+is a single pitch, where a slowly-moving fifth underneath would add depth without
+touching the truth claim; (4) nothing yet uses `startSeconds`, so the loop has no
+internal event — a single soft arrival somewhere in the middle would give the ear
+a landmark.
+
+**Not done, deliberately** (later phases): no canvas, no UI, no PWA, no export, no
+orrery. The app shell still shows only the Phase 1 data-load line.
+
+**Blockers:** none. One number worth knowing: the production bundle went from
+4.58 kB to **234 kB (59.7 kB gzipped)** because Tone entered the graph — expected,
+and Phase 5's service worker will precache it.
+
+**◇ REVIEW GATE — Atlas HQ · 2026-08-01 · ENGINEERING VERIFIED, EAR VERDICT = ITERATE
+→ Phase 3.5.** Independently confirmed the measurable side: I analysed the committed
+WAV in a separate toolchain — all six chord pitches present (C3/E3/G3/A3/G4/E5), drone
+A1/A2 solid, **off-scale probes F3 & B3 ~125 dB down** (Phase-2 quantization proven in
+the actual audio), 0 clipped samples, ~−20 dBFS RMS, stereo ~1 dB (centred). Code is
+clean: Tone fenced to `engine.ts`, `renderOffline` kept in-layer, tidy lifecycle/dispose,
+deterministic plan. **But the true gate is beauty, and Shambu listened: the v1 voice
+(single triangle+lowpass, block attack) is calm but too plain.** Target set for the
+beauty pass: the sound should *elevate the listener — mystical wonder, awe*. Requested a
+focused **Phase 3.5** (audio layer only; the deterministic score/truth stays untouched)
+before moving to Phase 4.
+
+---
+
+## Phase 3.5 — Beauty pass: "mystical wonder" · 2026-08-01 · ✅ complete, awaiting a LISTEN
+
+Reworked the dressing without touching the truth. **Shimmer** is the headline: a
+parallel send is pitch-shifted **up an octave** and fed back into the shifter, so
+each pass climbs another octave into a 14 s reverb — tails bloom upward into a
+haze instead of merely decaying. The octave is a correctness requirement, not a
+preference: **+12 semitones is the same pitch class**, so no matter how many
+times the cascade goes round it can never introduce a note the sky did not
+choose. The conventional +7 shimmer would have injected a B into A
+minor-pentatonic. **Voice timbre** moved from a plain triangle to an explicit
+**octave-only partial stack** (1f, 2f, 4f, 8f, with 3f/5f/6f/7f held at exactly
+zero), weighted by B–V so hot blue stars glitter and cool red ones stay wooden —
+stricter than physics, since even the triangle it replaces carried a 3f twelfth,
+but it makes the on-scale property airtight rather than merely probable.
+**Entries now bloom**: the score is already sorted brightest-first, so voice index
+*is* brightness rank — the brightest star leads and the rest arrive at 0.7 s
+intervals over 4.5–6.7 s attacks, like stars appearing at dusk instead of a block
+chord. Underneath, the drone's detune **wanders** ±7 cents once per loop so the
+beat never settles, and a gentle chorus widens the image. All of it is planned in
+the pure `voicing.ts` and merely wired in `engine.ts`. Two directions are
+selectable so the ear can choose rather than the author guessing: **`lush`** and
+**`subtle`**, differing only in shimmer send/feedback, reverb length, chorus
+depth and width — a test asserts style changes **no pitch, pan, gain, or voice
+count**. **Evidence:** typecheck clean, `npm run test` → **197 passed (197)** (up
+from 183), build succeeds. Two new clips of the same Bengaluru sky, A/B against
+the Phase 3 one which is kept: `docs/phase35-lush-bengaluru.wav` and
+`docs/phase35-subtle-bengaluru.wav`.
+
+| | Phase 3 | 3.5 lush | 3.5 subtle |
+| --- | --- | --- | --- |
+| peak | −7.6 dBFS | −4.3 | −6.2 |
+| RMS (steady state) | −19.8 | **−19.0** | **−19.1** |
+| clipped samples | 0 | **0** | **0** |
+| worst off-scale leakage | −43.1 dB | **−52.3 dB** | **−44.8 dB** |
+| octave-up energy (A4/A5) | −63 / −72 dB | **−17 / −40** | **−12 / −23** |
+
+**The on-scale guarantee survived, and got stronger.** Off-scale probes (F3, B3,
+F#4, B4, C#5, F5) sit **45–52 dB below** the strongest on-scale partial, against
+43 dB in Phase 3 — so the shimmer added no off-scale energy at all. Meanwhile the
+octave-up content rose by **more than 40 dB**, which is precisely the celestial
+haze, and provably the same pitch class. Two consecutive renders were
+**bit-identical by md5**, so the granular pitch shifter did not cost
+reproducibility.
+
+**A correction to what Phase 3 concluded about the stereo image.** Phase 3
+measured −1.02 dB of imbalance and I reported the west-heavy sky as "essentially
+centred". That reading was wrong — or rather, it was measuring a mix in which the
+sky's placement was largely buried. Computing the balance implied by the score's
+own pan values and equal-power panning gives **−4.83 dB** for this night. Phase
+3.5 measures −4.4 dB (lush) and −3.2 dB (subtle): the beauty pass did not break
+the image, it made the dry voices present enough for the real asymmetry to show.
+**So the honest figure for this sky is roughly −4.8 dB left, and that is what the
+azimuths dictate** — five of the eight bright stars genuinely sat west that
+night. I have left it alone. If it reads as lopsided by ear, the only honest lever
+is the mapping layer's `PAN_WIDTH` (0.85), which is Phase 2 territory and locked —
+it would need a Phase 2 amendment, not a fix hidden in the audio layer. Separately
+I did set the chorus `spread` to 0 rather than the usual 180, because opposite-
+phase modulation combs left and right differently and was adding about 0.7 dB of
+pull of its own; the stereo image is the score's to decide, not the chorus's.
+
+**Honesty note — I still have not heard any of this.** Level, spectrum, dynamics,
+stereo, and reproducibility are measured and in spec; whether it produces
+anything like wonder is exactly the thing I cannot measure, and the verdict is
+Shambu's. Two things I would flag for that listen: the shimmer feedback at 0.38
+(lush) is the single dial most likely to be wrong in either direction, and the
+bloom now takes about 9 seconds to fully arrive, which is intentional but means
+the first third of an 18 s clip is deliberately sparse.
+
+**Scope:** only `engine/audio/voicing.ts`, `engine/audio/engine.ts`, their
+barrels, the tests, and the dev harness (which needed a `?style=` parameter to
+render the two takes). `engine/mapping/` and `engine/model/` were not touched —
+verified by file mtime. Boundary suite green: Tone still appears in `engine.ts`
+alone.
+
+**Not done, deliberately:** no canvas, no UI, no PWA, no export, no orrery.
+
+**Blockers:** none.
+
+---
+
+## Slice A0 — Living Sky design note · 2026-08-05 · ◇ REVIEW GATE: PASSED WITH DISTINCTION → proceed to A1a
+
+`LIVING_SKY_DESIGN.md` reviewed in full by Atlas HQ. The eight push-backs are
+not friction — they are exactly the explicit-pushback behaviour the handoff
+ordered, each one measured against the real bundled catalogue rather than
+asserted. **All eight accepted (P1–P8).** Rulings on the open questions:
+(Q1) YES — drop "stick figure" from all copy; say *"a path through its
+brightest stars"* until a permissively-licensed asterism set is
+licence-verified (the refusal to bundle GPL data unverified is the grounding
+rule applied correctly). (Q2) YES — scale + root fixed per session; weather
+moves only continuous dials. (Q3) YES — per-session κ in [40,90] with
+paceComfort; the compression number is shown in the UI, honesty-line clause
+adopted. (Q4) **APPROVED — §10.1 amends the Phase 2 pitch contract**: pitch
+class from maximum altitude (90−|lat−dec|, a fixed per-observer truth),
+register from current altitude in octaves; HQ verified the formula and accepts
+this supersedes current-altitude→pitch for the streaming CHORD (static
+MusicalScore/orrery path unaffected); to be re-derived independently at the A1
+review. (Q5) YES — default 660 s. Additional notes: P4 (PULSE off by default)
+is now *evidence-backed* — Shambu's independent Suno experiment ("Cosmic
+Drift") was spectrally analysed and its drum-heavy midsection (percussive
+share rising 8%→33%) is precisely where he reported the emotion dropping;
+ear and measurement agree. P3 logged as a ticket: re-add `pmra`/`pmdec` in
+the prep script before any time-scrub slice. Degree-space transforms (§7.3)
+and partition invariance (§3.1) are recognised as the two load-bearing
+correctness ideas and must survive any descoping, per §15. **Sequencing
+decision: A1 splits into A1a (core stream: time model, closed-form events,
+CHORD §10, weather §8, arc + gesture §9, simple single-star LEAD with budgets)
+and A1b (constellation motifs §7, full phrase grammar §6.3, development
+transforms); PULSE deferred to Slice B wiring.** Halt-review loop continues.
+
+---
+
+## Living Sky — Slice A1a: the core stream · 2026-08-03 · ✅ complete, awaiting review
+
+Built the evolving stream in the pure mapping layer, per the approved design.
+Six new modules — `skyTime` (listening ↔ sky ↔ sidereal time), `skyEvents`
+(closed-form events), `skyWeather` (statistics → dials), `session` (the
+once-per-session plan), `conductor` (salience and budgets) and `stream`
+(`renderWindow`) — plus the §12 schema: every `MusicalEvent` now carries a
+**`role`** (`ground`/`chord`/`pulse`/`lead`/`weather`), required
+`startSeconds`/`durationSeconds`, an optional amplitude `envelope`, and an
+**`origin`** naming the real star and the sky-second that caused it. The
+astronomy is closed-form throughout — `cos H = (sin A − sin dec·sin lat) /
+(cos dec·cos lat)` gives rise, set, culmination *and* the octave-lift crossing
+from one function, so there is no search, no sampling and no tolerance anywhere
+in the event layer. CHORD follows the approved §10.1: pitch class from the star's
+**maximum** altitude (its stable identity), octave by voice-leading toward the
+sounding centroid, amplitude swelling through a smoothstep horizon fade. The
+Conductor works a fixed phrase grid, ranks true events by salience
+(culmination 1.0 > rise 0.6 > set 0.45), and keeps note budget, silence budget,
+minimum gap and recency. `solveKappa` chooses the compression so the night's most
+dramatic real culmination lands at 68% of the session. **Evidence:** `tsc
+--noEmit` clean; `npm run test` → **275 passed (275)**, up from 197, of which 66
+are new Living Sky tests; `npm run build` succeeds; `boundaries.test.ts` green.
+
+**Partition invariance holds** — the headline. Five different partitions of an
+hour (halves, sixths, an uneven set with a 1-second window, a 1-2-3-second head,
+and the trivial one) all reassemble into exactly the single-window rendering,
+event for event; every event appears exactly once; 30 s, 120 s and 600 s windows
+give identical unions; and a boundary placed precisely *on* a chord onset changes
+nothing. It holds for birth-sky sessions too, where the arc and both gestures are
+active. Nothing audibly restarts because there is no state to restart.
+
+**The astronomy is cross-checked against Phase 2's independent code**, not
+restated: each predicted rise has the star below the horizon 20 listening-seconds
+before and above 20 after (via `toHorizon`); each culmination sits at
+`90 − |lat − dec|` and is verified to be a genuine local maximum at ±25 s and
+±60 s; and the three visibility regimes reproduce the design's measured London
+figures exactly — **45 rise-and-set, 21 circumpolar, 26 never-rise** for stars
+brighter than magnitude 2.5.
+
+**Hand-derived output, for the review to re-check** (`docs/LLD.md` §4.10 has the
+full table). Bengaluru, 1993-08-01 00:00 IST, defaults: **κ solves to 66.40×**,
+so 660 s of listening traverses 12.2 sky-hours; the weather picks **dorian**;
+**Arcturus** opens alone at t = 0 and is the **last voice sounding at 660 s** —
+one, all, one; and the bloom is **Aldebaran culminating at 449 s, 68.0% through**,
+which is the κ the design note predicted for Aldebaran in Slice A0. The chimes
+either side of it read: Mirfak culminates, Deneb sets, Alsephina rises, Aldebaran
+culminates, then Rigel, Bellatrix and Saiph culminate in turn — Orion crossing
+the meridian right behind Taurus, which is exactly what that sky does.
+
+**One real bug the tests caught:** a lead chime near the very end rang 2 seconds
+past the session, so the closing gesture would have left one star *plus a stray
+bell*. Chime durations are now clamped to the session end.
+
+**A finding that corrects the design note.** §P7 said extreme latitudes give a
+sparse sky. Measured, that is wrong: **latitude does not make a sky sparse — it
+makes it still.** A pole sees half the celestial sphere permanently and that half
+holds about as many stars as any other half (4,249 visible at 89.5° against 4,306
+at Bengaluru; densities 0.67 either way). The genuinely lonely sky is the
+**light-polluted** one — restricting the catalogue to magnitude ≤ 3 drops density
+from 0.665 to **0.034**, a twentyfold difference, and that is exactly the
+city-dweller the Vision names. The polar sky is still lonely, but through
+*stasis*: 59 culminations against 2 rises and 1 set per hour of piece time. The
+weather mechanism needed no change — two of my test premises did, and the LLD now
+records the corrected story. It also vindicates leaning the LEAD on culmination.
+
+**Two flagged deviations, both deliberate, both cheap to reverse:**
+
+- **The octave lift is decided once per voice** from the star's culmination
+  altitude rather than re-evaluated as it climbs. Design §10.1 wanted register to
+  follow *current* altitude; doing that means splitting a sustained voice at the
+  crossing and crossfading, which risks a click mid-note for a subtle gain.
+  `hourAngleAtAltitude` already returns the crossing time, so this is a small
+  A1b change if HQ wants it.
+- **The voice-leading bound is measured against the canonical centroid** — the
+  quantity `chooseOctave` actually optimises — rather than the centroid of
+  assigned octaves, which would make the rule recursive and break window
+  independence. Budget is 6 semitones of residue plus 12 for a lifted voice;
+  measured worst case 17.7.
+
+**A musical wart worth an ear, not a fix yet.** Arcturus is the brightest star up
+at Shambu's birth moment, so it opens the piece — but it is *setting*, and at
+κ = 66× it drops below the horizon 16 seconds in, returning near the end. The
+gesture is structurally correct (it does open and close the piece) and it is
+honest, but a 16-second opening voice is thin. The fix, if wanted, is to prefer
+the brightest star with a minimum remaining visibility — a one-line change to the
+opening-star rule, but it is a design decision rather than a bug, so it is flagged
+rather than taken.
+
+**One tooling improvement.** The boundary guard was scanning prose: an error
+message that legitimately said "window bounds must be finite" tripped the DOM
+rule. It now reduces a file to its **code** — dropping comments and string
+contents while *keeping* template-literal `${...}` expressions, which are real
+code. Negative-tested: `document.title` in `stream.ts` and a `Math.random()`
+hidden inside a template expression in `scales.ts` are both still caught.
+
+**Not done, deliberately** (Slice A1b): no constellation motifs, no
+statement→answer phrase grammar, no development transforms (inversion,
+augmentation). PULSE is declared in the role union but never emitted, per the
+ruling that it is deferred to Slice B and defaults off. No audio wiring — the
+audio layer still plays the Phase 3.5 static score; connecting it to the stream
+is its own slice.
+
+**Blockers:** none.
+
+**◇ REVIEW GATE — Atlas HQ · 2026-08-06 · PASSED → proceed to A1b.** Deep gate,
+independently verified: HQ re-derived the hand-derived table with its own Meeus
+implementation — **κ = 66.40× exactly, bloom = Aldebaran culmination at 449 s
+(68.0%)**, Arcturus confirmed as the brightest star above the horizon at t0
+(mag −0.05, alt 3.7°, Vega second at 0.03), and the Arcturus set-time wart
+reproduced (≈14.6–16 listening-s). `hourAngleAtAltitude` checked by hand: the
+general form correctly reduces to cos H₀ = −tan(lat)tan(dec) at A = 0; regime
+classification (max/min altitude) and the pole degeneracy are correct. The
+latitude-makes-still-not-sparse correction is accepted — good science, honestly
+reported — and it surfaces a roadmap gem: a **limiting-magnitude "light
+pollution" dial** (the same sky from a city vs a dark site, both true) as a
+future honest emotional control. *Rulings on the flagged deviations:* (1)
+once-per-voice octave lift ACCEPTED for now — click risk outweighs the subtle
+gain; revisit at the first audition; (2) canonical-centroid voice-leading bound
+ACCEPTED (window independence wins). *Ruling on the opening-star wart:* the
+gesture's meaning requires the anchor to still be sounding while the sky
+gathers around it — A1b adds a **minimum-visibility rule** (opening star must
+remain above the horizon through the GATHERING stage; brightest satisfying it,
+plain brightest as fallback), config-flagged for A/B by ear. Sequencing
+confirmed: A1b = motifs + phrase grammar + development transforms; then a small
+**A2 audition slice** wiring the stream to the existing audio engine so Shambu's
+ear can judge the living piece before Slice B's instruments.
+
+---
+
+## Living Sky — Slice A1b: the composed layer · 2026-08-04 · ✅ complete, awaiting review
+
+Added the grammar. `motif.ts` derives a constellation's figure — brightest ≤5
+stars above magnitude 3, ordered by the **exact shortest open Hamiltonian path**
+(≤120 permutations, so the optimum is computed rather than approximated),
+oriented from the brighter end, with the contour taken from declination offsets
+and the rhythm from angular separations. All in RA/Dec, so the figure is
+identical from every place and date. The Conductor was rebuilt around
+**statement → answer → rest**: one phrase per period, the answer transposed down
+one scale degree, truncated and quieter, then the scheduled silence. Development
+transforms — inversion when a subject is **setting**, augmentation when it
+**culminates**, octave shift for register — all operate in **scale-degree space**,
+which is the structural reason the on-scale covenant survives the grammar.
+`degreeToMidi` folds out-of-range pitches by whole octaves rather than clamping,
+because a clamp is exactly how an off-scale note would sneak in at the edges.
+**Evidence:** `tsc --noEmit` clean; `npm run test` → **305 passed (305)**, up from
+275, of which 94 are Living Sky; `npm run build` succeeds; `boundaries.test.ts`
+green and re-negative-tested (a `Math.random()` hidden in a template literal in
+`motif.ts` is still caught). Copy and doc-comments say **"a path through its
+brightest stars"** throughout; "stick figure" appears nowhere.
+
+**The property test that matters:** arbitrary degree sequences — including
+negatives and values like ±456 — pushed through every composition of
+transposition, inversion and octave shift, across all five scales and four roots,
+never leave the ladder. Measured contours are real: Orion `[-3,-1,-1,2,3]` walks
+up through the belt, Cassiopeia `[0,-4,2,2]` zigzags, Canis Major
+`[3,3,-1,-2,-3]` falls away from Sirius. **Motif stability** holds across six
+observers × four dates (§14.17): identical star path, identical degrees,
+identical gaps. **29 constellations qualify**, not the 31 the design note
+predicted — that probe used `mag ≤ 3` while the spec says `mag < 3`, and two
+constellations sit exactly on 3.00.
+
+**Hand-derivable, Bengaluru 1993-08-01 00:00 IST** (κ 66.40×, dorian, bloom =
+Aldebaran culminating at 449 s). Four motifs fire, in the order those
+constellations cross the meridian — Cygnus at 5 s, Andromeda at 261 s, Perseus at
+389 s, Gemini at 583 s. The phrases either side of the bloom:
+
+```
+t=369s  39840        rise           statement [0]        answer []
+t=389s  Per (motif)  constellation  statement [-3,-1,-1] answer [-4]
+t=417s  Alsephina    rise           statement [0]        answer [-1]
+t=449s  Aldebaran    culmination    statement [0]        answer [-1]   <- BLOOM
+t=484s  Rigel        culmination    statement [0]        answer [-1]
+t=520s  Betelgeuse   culmination    statement [0]        answer [-1]
+t=546s  Canopus      culmination    statement [0]        answer [-1]
+```
+
+The arc's climax and the Conductor's chosen phrase land on the same event —
+**Aldebaran speaks at exactly 449 s**, the moment the piece was paced to reach —
+and Orion follows it across the meridian star by star, because that is what that
+sky does.
+
+**The opening anchor, and a question for HQ.** All three rules pick a different
+star on this sky, which is exactly why it is worth an ear:
+
+| Rule | Star | alt at 0 / 231 / 660 s |
+| --- | --- | --- |
+| `brightest` | Arcturus (mag −0.05) | 4° / **−49°** / 8° |
+| `survives-gathering` | Vega (mag 0.03) | 56° / 9° / **−32°** |
+| `bookends` *(default)* | **Polaris** (mag 1.97) | 13° / 14° / 13° |
+
+HQ's ruling was the gathering rule, which gives **Vega** — and it does fix the
+thin opening. But Vega has set by the close, so the one → all → one mirror cannot
+complete, and forcing it to sound would be a lie. So the default refines the
+ruling *within its qualifying set*: prefer a qualifying star that is also up at
+the end. On this sky that is **Polaris** — dimmer than the Vision's "brightest
+star of your sky", but circumpolar and steady at ~13° all night, so it can
+genuinely bookend the piece. Flagged rather than assumed: `openingAnchorRule`
+takes all three values and A2 can A/B them.
+
+**Three real bugs the tests caught, one of them structural:**
+
+- **Partition invariance broke** once phrases existed. A note that spilled past
+  its own period was dropped by the window holding that period and never picked
+  up by the next — present in a single big window, missing from any partition.
+  Notes are now bounded to the active portion of their own period, and
+  `phrasesInRange` looks back one period as belt-and-braces. Re-proven with
+  motifs and phrases active, at three window sizes.
+- **The note budget was computed against the wrong denominator.** Dividing the
+  per-minute figure by the phrase rate overshoots, because a *sliding* minute can
+  straddle two periods; the sliding-window test caught 10 notes against a budget
+  of 9.4. It now divides by `floor(60/phrase) + 1`.
+- **Negative zero** in a motif contour (`[-0,-4,2,2]` for Cassiopeia) made
+  deep-equality fail — normalised.
+
+**A musical fix found by reading the output:** Pegasus and Taurus were firing
+near the end of their active portion and getting truncated to a single note. A
+one-note motif is not a motif, so a constellation is now only accepted as a
+subject when at least 3 of its notes fit; otherwise the Conductor falls through
+to the next-best subject. Six motifs became four, and all four now speak in full.
+
+**A performance fix that matters for A2.** `arcAt` in endless mode was measuring
+all 8,849 stars for *every* envelope breakpoint. It now follows the fraction of
+chord-pool stars above the horizon — 48 reductions instead of 8,849, cheaper and
+a better proxy for how full the music should be — and window weather is memoised
+on an absolute 30-second grid, so slicing cannot change it. The Living Sky suite
+went from **26 s to 2.4 s**, which is the difference between a stream that can be
+scheduled in real time and one that cannot.
+
+**Not done, deliberately:** PULSE is still declared but never emitted (deferred to
+Slice B). No audio wiring — that is Slice A2, not started.
+
+**Blockers:** none.
+
+**◇ REVIEW GATE — Atlas HQ · 2026-08-06 · PASSED → proceed to A2 (audition).**
+HQ re-derived Orion's motif independently from the raw catalogue: exact
+shortest open Hamiltonian path over the five brightest = **Rigel → Alnitak →
+Alnilam → Bellatrix → Betelgeuse (26.0°)** — identical; contour verified under
+the (max−min)/2 half-span definition. Opening-anchor audit reproduced exactly
+(Arcturus 4.0° remaining vs 64.1° needed → fails; Vega qualifies; and the
+builder's catch is right — Vega sets before the close, so the mirror cannot
+complete). **Ruling: the `bookends` refinement is ACCEPTED as default** — it is
+the correct completion of HQ's own rule, and Polaris as the anchor has its own
+truth-poetry (the one still point of the sky, opening and closing the piece
+while everything wheels around it); all three `openingAnchorRule` values stay
+for the A2 ear A/B. The partition-invariance regression that phrases introduced
+is exactly the failure mode the headline test exists to catch — found, fixed,
+re-proven at three window sizes; the note-budget denominator fix, −0
+normalisation, the ≥3-notes motif-acceptance rule (a one-note motif is not a
+motif — good musical judgment), and the 26 s → 2.4 s suite speedup (real-time
+viability for A2) are all accepted. The bloom table is the system working as
+dreamed: Aldebaran speaks at exactly 449 s and Orion follows it across the
+meridian star by star. **Next: Slice A2 — the audition** (stream → existing
+audio, offline clips per anchor rule + the bloom neighbourhood; Shambu's ear is
+the gate).
+
+---
+
+## Living Sky — Slice A2: the audition · 2026-08-04 · ✅ complete, awaiting the EAR GATE
+
+The living sky is audible. `src/engine/audio/streamEngine.ts` schedules
+`ScoreWindow`s through the existing Phase 3.5 palette: GROUND is a persistent
+drone whose level follows the arc, CHORD voices are octave-only partial stacks
+swelling on the score's own horizon-fade breakpoints (the swell is the sky's, not
+an ADSR's), LEAD chimes and motif notes use a brighter struck-glass voice, and
+WEATHER drives the shimmer send and reverb wet. Because every event carries an
+absolute piece time, scheduling is arithmetic against a fixed origin — no
+crossfade, no re-trigger, no boundary state, which is exactly what partition
+invariance bought. A slice may start anywhere: voices already sounding are begun
+part-way through with their envelope read at the right offset, so a bloom clip
+opens with the bed already in the air. `getLevels()` still reports per-voice, and
+`getLevelSources()` now names the star each level belongs to, ready for the
+Phase 4 star-field. The harness gained mode, anchor-rule, style and start-time
+selectors. **Evidence:** `tsc --noEmit` clean, **305 tests still pass**, build
+succeeds, harness confirmed absent from `dist/`.
+
+**Six clips committed under `docs/`** (32 kHz stereo, 30 s each, ~3.7 MB):
+`a2-opening-bookends.wav` (Polaris), `a2-opening-survives-gathering.wav` (Vega),
+`a2-opening-brightest.wav` (Arcturus), `a2-bloom.wav` (435–465 s, Aldebaran
+culminating at 449 s), `a2-bloom-subtle.wav` (same window, subtle style) and
+`a2-endless.wav`.
+
+| clip | peak | RMS | clipped |
+| --- | --- | --- | --- |
+| opening / bookends | −15.2 | −27.5 dBFS | 0 |
+| opening / survives-gathering | −15.2 | −27.2 | 0 |
+| opening / brightest | −15.9 | −29.1 | 0 |
+| **bloom (lush)** | −4.8 | **−19.2** | **0** |
+| bloom (subtle) | −6.6 | −20.4 | 0 |
+| endless | −11.8 | −25.0 | 0 |
+
+The ~8 dB between the opening and the bloom is not an error — it is the arc. One
+star against a full sky *should* be quieter, and Phase 3.5's static chord was flat
+to within a decibel for its whole length.
+
+**What is actually in the clips** (re-derivable from `renderWindow`):
+
+```
+OPENING 0-30s              BLOOM 435-465s
+ 0.0s chord Polaris  (alone)    448.8s lead Aldebaran midi 79 [culmination]
+ 5.3s lead  Cygnus motif        450.2s lead Aldebaran midi 78 [answer, one degree down]
+10.9s chord Arcturus            + the sustained chord bed carried in from earlier
+13.7s chord Vega
+23.7s chord Altair
+29.4s chord Antares
+```
+
+The opening is the gesture, exactly as designed: one star alone, a constellation
+answering, then the sky arriving in brightness order.
+
+**A real bug the measurements caught.** The first bloom render clipped badly —
+**6,282 clipped samples, peak 0.0 dBFS, the mix pinned flat at −11 dBFS**. Cause:
+a fixed per-voice gain, where the opening has one voice and a later stretch has
+twenty. Phase 3.5 avoided this with `masterGain / sqrt(voices)` on a static chord;
+the stream now scales each chord voice by `1/sqrt(mean concurrent voices)` sampled
+across a full sidereal turn, so the level is steady with no gain jump as the sky
+fills. Zero clipped samples everywhere afterwards.
+
+**A correction to what I reported in Phase 3.5.** I claimed "worst off-scale
+leakage −43 to −52 dB". That was measured by probing **exact equal-tempered**
+off-scale frequencies, and it is too weak a test. A peak-finding sweep of the
+lush bloom finds strong energy at 115.0, 235.0, 475.0 and 955.0 Hz — all 14–33
+cents off equal temperament, which is exactly why narrow probes missed them. Each
+sits a **constant ~4.5 Hz** from an on-scale partial; constant in hertz rather
+than cents means it is not a pitch relationship but granular sideband from
+`Tone.PitchShift`, the octave-up shimmer. Confirmed by rendering the identical
+window in `subtle`: the strongest off-scale peak drops from **+4.0 dB above** the
+loudest on-scale partial to **−30.6 dB below** it, and the top six peaks go from
+4-of-6 off-scale to **6-of-6 on-scale**. **The mapping layer is not implicated** —
+every scheduled pitch is on-scale and 305 tests prove it — but the lush shimmer's
+haze is inharmonic, and my earlier measurement understated it. Peak-finding is now
+the method of record.
+
+**Honest note on how it sounds — I have not heard it.** What I can say is what is
+measurably different from the static chord, and it is not small: notes now *enter
+and leave* (the 30 s opening alone contains five arrivals where Phase 3.5 had
+eight voices all starting at zero and never changing), the piece has a dynamic
+arc of about 8 dB where the old one was flat, there is a melodic line that speaks
+and then rests, and a constellation states a four-note figure in the first ten
+seconds. Those are the bones the static version lacked — arrival, departure,
+phrase, silence, and shape. Whether they add up to *wonder* is precisely the thing
+I cannot measure, and it is the gate.
+
+**Two things to listen for, and one recommendation.** First: **the anchor.** The
+three opening clips differ only in which star is alone at the start — Polaris
+(steady, dimmer, and there at the close), Vega (bright and high but gone by the
+end), Arcturus (brightest, and setting — it vanishes 16 s in). Second: **lush vs
+subtle at the bloom.** On the measurements I would recommend **subtle as the
+default for the streaming palette**: its spectrum is clean where lush's is
+dominated by shimmer sideband, and with a living texture there is already plenty
+of movement without the haze. That is a measurement-led opinion, not an ear one —
+overrule it freely.
+
+**What I could not deliver, and why.** The clips are **30 s, not the 150 s / 190 s
+/ 90 s asked for**. Offline rendering runs at roughly half real time through this
+graph (two long reverb impulse responses plus a granular pitch shifter), and
+Chrome's intensive background-tab throttling reliably kills any render past about
+40 s when the tab is not in front — a 150 s attempt ran over five minutes and never
+finished. Thirty seconds completes dependably after a page reload. The chosen
+windows still contain the events that matter (the whole opening gesture; the bloom
+with 14 s of approach). **To render the full-length versions**, open the harness in
+a **foreground** tab and use, for example,
+`/harness.html?seconds=190&rate=48000&name=bloom-full.wav` with `from` set to 370
+— it writes straight into `docs/`. Also worth knowing: `docs/` is now 32 MB of
+WAVs. They are all regenerable from the harness, so gitignoring them before the
+first push is a reasonable call if the repo weight matters.
+
+**Not done, deliberately:** no samplers, no mood presets, no UI beyond the dev
+harness — all Slice B. PULSE is still never emitted.
+
+**Blockers:** none.
+
+**◇ REVIEW GATE — Atlas HQ · 2026-08-06 · ENGINEERING VERIFIED → EAR GATE OPEN.**
+All six renders independently re-measured: zero clipped samples, sane levels,
+14–17 distinct arrivals per 30 s clip (the static chord had none — the music
+demonstrably moves). The corrected off-scale methodology is confirmed by HQ's
+own peak-finding: **subtle bloom = 6-of-6 top peaks on-scale** (clean A dorian,
+F# sixth present), **lush bloom carries an off-scale A# granular sideband**
+(−5.9 dB below the top on-scale peak in a 30 s average; worse at the bloom
+instant per the builder's instant measurement). The voice-count-aware master
+gain and the honest 30 s-render limitation (Chrome background throttling;
+foreground workaround documented) are accepted. Recommendation noted — subtle
+as streaming default — pending the only verdict that matters: **Shambu's
+listen.** Clips delivered; his ear decides the opening anchor
+(bookends/Polaris vs survives-gathering/Vega vs brightest/Arcturus), lush vs
+subtle, and above all whether the living sky finally *moves* him. Slice B
+brief follows his verdict.
+
+**◇ EAR GATE VERDICT — Shambu · 2026-08-06 · FAILED on musicality.** "All the
+sounds seem monotonous … one huge note + a few notes come and go … no ups, no
+downs, no crescendo." Honest verdict, honestly recorded. **HQ diagnosis — the
+MESO-TIMESCALE GAP:** music lives on three timescales; we built macro (the
+11-min arc — real, verified) and are pending micro (Slice B timbres), but the
+0.5–3 s layer where the ear binds notes into melody is EMPTY — the Conductor
+speaks one phrase per 25–45 s over sustained voices, which perception reads as
+isolated events over a hum, not music. Every reference in the Musical Vision
+(Zimmer ostinato, handpan cycles, CaS arpeggios, Sigur Rós bowed motion) has
+continuous meso-scale motion; deferring/off-defaulting PULSE removed ours (the
+Cosmic Drift lesson was over-read — *drums* hurt emotion; gentle figuration is
+precisely what the handpan reference proves right). *The 30 s clips also
+structurally could not contain the macro arc — render-length spec error, HQ's
+share of the miss.* **Fix hypothesis — the FIGURATION layer** (PULSE reborn,
+correctly): continuously arpeggiate the CURRENT TRUE CHORD at ear speed,
+density/register/velocity riding the arc and weather; covenant-safe (timing is
+declared artistic; the pitches remain the real sky's). **Tested cheaply before
+any build:** HQ hand-composed a 104 s direction sketch in-session
+(A-dorian star chord, staged figuration, Orion's true contour as the climax
+figure, statement→answer echo, one→all→one shape) — delivered to Shambu as the
+hypothesis test. His verdict on the sketch gates the next slice; no build until
+the direction is ear-confirmed.
+
+**◇ SKETCH VERDICT — Shambu · 2026-08-06 · DIRECTION CONFIRMED. "This is much
+better… I get the flow and this makes so much sense… I am excited again."**
+The meso-timescale hypothesis is ear-validated; the figuration layer is the
+fix. Two craft notes from his listen, both correct and both now acceptance
+criteria for A3: **(1) transitions** — at 16 s / 40 s / 52 s the sketch
+hard-switches patterns with no bridge ("done in haste"); the engine must evolve
+patterns gradually (≤1 slot changed per cycle; transitional/anticipation
+cycles at stage boundaries; density and register move continuously, never
+step). **(2) instrument quality** — acknowledged; the sketch's numpy plucks are
+the floor, Slice B's sampled instruments are the fix. New taste reference
+registered: **Motorcycle Diaries OST (Santaolalla)** — sparse plucked intimacy
+carrying large emotion → the figuration wants organic, finger-played warmth
+(favors handpan/kalimba/felt-piano/nylon-adjacent plucks in the B palette).
+**Next: Slice A3 — the FIGURATION layer in the engine**, then re-audition at
+full length, then B.
+
+---
+
+## Living Sky — Slice A3: the FIGURATION layer · 2026-08-06 · ⚠️ ENGINE COMPLETE, AUDIO EVIDENCE BLOCKED
+
+The meso layer exists. `src/engine/mapping/figuration.ts` weaves continuously
+through the chord that is currently sounding, at ear speed — the 0.5–3 second
+timescale the ear-gate diagnosis identified as empty. Its whole vocabulary is
+`soundingChordTones`, extracted into a new `chordVoices.ts` so the figuration and
+the CHORD events cannot disagree about what is in the air; a figuration note can
+therefore only ever double a pitch that is genuinely sounding, which makes the
+layer **on-scale and true by construction rather than by a check**. The dormant
+`pulse` role is renamed **`figuration`** — the old name was part of why it stayed
+dormant, since "a pulse is a beat" and the percussion lesson got over-read into
+"no meso layer at all", when the handpan reference shows a soft cyclic weave is
+exactly right. **Evidence:** `tsc --noEmit` clean, **326 tests pass** (up from
+305), build succeeds, boundary guard green and re-negative-tested on the new
+files. Over a full session the figuration contributes **716 notes** against 46
+lead, 44 chord and 22 each of ground and weather — the meso layer is now by far
+the densest, as it should be.
+
+**The design problem, and how it was solved.** The pattern must evolve by at most
+one slot per cycle *and* remain a pure function of absolute time, or partition
+invariance dies. Iterating forward needs unbounded history, so instead every slot
+carries a deterministic **change epoch**: a seeded permutation maps each
+cycle-residue to the one slot allowed to change then, and because that map is a
+bijection **exactly one slot changes per cycle by construction**. The key move is
+that *everything* about a slot — its tone and whether it sounds at all — is read
+at its own change cycle, so every other slot resolves to the same value it had a
+cycle earlier and literally cannot differ. Density therefore rides the arc
+continuously as a *target*, and each slot adopts it when its turn comes. An
+earlier attempt suppressed the re-pick on "density cycles" instead; it failed at
+cycle 32, because suppression only *shifted* the change rather than removing it.
+
+**The evolution, measured across the GATHERING → BUILDING boundary** (cycle 17,
+t = 74.8 s; `·` is a silent slot, and the last column is how many slots differ
+from the line above):
+
+```
+cycle   t(s)   stage       slots                                          diff
+   13   57.2   gathering   ·  ·  ·  Vega     ·  Fomalhaut Achernar Deneb    —
+   14   61.6   gathering   ·  ·  ·  Vega     ·  Fomalhaut Achernar Deneb    1
+   15   66.0   gathering   ·  ·  ·  Polaris  ·  Fomalhaut Achernar Deneb    1
+   16   70.4   gathering   ·  ·  ·  Polaris  ·  Fomalhaut Achernar Deneb    1
+   17   74.8   gathering   ·  ·  ·  Polaris  ·  Fomalhaut Achernar Deneb    1
+   18   79.2   building    ·  ·  ·  Polaris  ·  Vega      Achernar Deneb    1
+   19   83.6   building    ·  ·  ·  Polaris  ·  Vega      Achernar Deneb    1
+   20   88.0   building    ·  ·  ·  Polaris  ·  Vega      Achernar Fomalhaut 1
+   21   92.4   building    ·  ·  ·  Polaris  ·  Vega      Shaula   Fomalhaut 1
+```
+
+The stage boundary passes through as a **single tone substitution**, Fomalhaut →
+Vega. No pattern switch, no density step, no lurch — which is precisely the craft
+note from the sketch listen. Tests assert this over every cycle of the session and
+over 400 cycles of endless mode, plus: migration is gradual (a set star's slot
+falls silent at once, then takes a new tone only at its own next change cycle);
+the note rate never steps more than the configured bound at a stage boundary; the
+anticipation cycle dips velocity without touching the slot count, so only one
+parameter moves; humanisation is deterministic, bounded, and never reorders the
+weave; and **partition invariance survives with figuration active** at three
+window sizes.
+
+**Two rendering fixes, one of which finally explains Slice A2.** A2's long renders
+never finished and I attributed it to background-tab throttling without proof.
+The source confirms it: Tone's `OfflineContext.render()` defaults to
+`asynchronous = true` and yields to **`setTimeout(done, 1)` every render block** —
+exactly what Chrome throttles to roughly once a minute in a hidden tab.
+`renderStreamOffline` now drives an `OfflineContext` directly with
+`render(false)`, immune to timer throttling. Separately, every voice was being
+given a `Tone.Meter` (an AnalyserNode); they are needed live for the star-field
+but are pure waste offline, and are now off for renders.
+
+**What I could not deliver: the audio.** The full-length renders did not complete.
+With the throttling fix in place a render now *progresses* indefinitely instead of
+stalling — that part is genuinely fixed — but throughput in this environment is
+far too low: a **660 s render ran 29 minutes**, a **330 s half ran 31 minutes**,
+and after the meter optimisation a **60 s clip still took over 16 minutes**
+without finishing. The figuration is itself part of the cost — it roughly triples
+the note count, and every note currently builds a `Tone.Synth` with a `custom`
+partials oscillator, which means constructing a PeriodicWave per note. That is
+worth fixing in Slice B anyway, where sampled instruments replace these synths and
+should be markedly cheaper per note.
+
+So this slice halts **incomplete on evidence**. The engine is done and verified in
+the score; the ear gate cannot open until there is something to hear. To produce
+the clips, open the harness in a **foreground** tab (the renderer no longer stalls
+there) — `npm run dev`, then
+`/harness.html?seconds=660&rate=32000&name=a3-birthsky-full.wav`, and for endless
+mode switch the mode selector and use `seconds=180`. Expect roughly half an hour
+per full session on this machine. I would rather say that plainly than ship a
+30-second clip and call it an audition, since 30 seconds was structurally unable
+to show the arc last time and would be no better now.
+
+**A judgement call worth flagging:** I chose to keep the existing reverb/shimmer
+tail rather than thin it to make renders finish. Cutting it would have produced
+clips fast, but they would not be the piece Shambu is being asked to judge.
+
+**Not done, deliberately:** no samplers, no mood presets (Slice B). The Motorcycle
+Diaries reference — sparse plucked intimacy — is recorded for that palette; the
+current figuration voice is a deliberately soft synth pluck and is the floor, not
+the target.
+
+**Blockers:** the ear gate needs a foreground render, which I cannot drive from
+here.
+
+**◇ REVIEW GATE — Atlas HQ · 2026-08-07 · ENGINE PASSED; RENDER BLOCKER SOLVED
+BY HQ; EAR GATE OPEN.** The cycle table is exactly what the sketch verdict
+demanded — the GATHERING→BUILDING boundary passes as a single tone substitution
+(Fomalhaut→Vega), ≤1 slot per cycle asserted across the whole session and 400
+endless cycles, anticipation moves one parameter only, migration is gradual,
+partition invariance holds with figuration active. The A2 stall root-cause
+(Tone's async offline render yielding via throttled setTimeout) and the
+`render(false)` fix are accepted; the refusal to ship a 30 s non-audition and
+the keep-the-reverb judgement call are both endorsed. **Render throughput
+blocker resolved without the 30-min browser bake:** HQ added
+`test/a3ScoreExport.test.ts` (score → JSON in 1.05 s — the pure layer paying
+off) and rendered the TRUE engine score with the ear-approved sketch
+synthesizer — full 660 s birth-sky session (850 events: 716 figuration / 46
+lead / 44 chord, A dorian, Polaris bookends) + 180 s endless, delivered to
+Shambu as mp3. Voices are sketch-grade (Slice B replaces them); the
+COMPOSITION under audit is 100% engine. Note for Slice B: per-note synth cost
+(PeriodicWave per note) is the real render bottleneck — samplers should fix
+speed and beauty together. **Shambu's full-length verdict decides Slice B.**
+
+**◇ EAR REPORT + FORENSICS — 2026-08-07 · Shambu: "continuous background note…
+sounds like noise… other notes on top." HQ stem analysis: HIS EAR WAS RIGHT —
+THE HQ RENDER'S MIX WAS INVERTED; the composition never reached him.** Stems of
+the v1 render (steady state): chord bed −7.6 dBFS (loudest!), ground −12.4,
+lead −29.3, **figuration −42.6 — the A3 layer sat 35 dB under the bed,
+perceptually nonexistent**. Causes, all in HQ's renderer, not the engine: (1)
+HQ failed to apply the concurrent-voice normalization the A3 builder documented
+(≈20 simultaneous chord voices summed raw); (2) **ground AND weather both emit
+midi 45 (A2)** — two roles stacked on one pitch for all 660 s = the "continuous
+note," their mutual detune-beating = the "noise" (bed measured spectrally pure;
+no actual noise); (3) figuration velocities (magnitude-derived, mostly faint)
+rendered uncompressed. **v2 rendered and delivered** with the corrected
+hierarchy — figuration foreground (velocity √-compressed), chord ÷√N, ground
+halved, weather as octave-up whisper (never unison with ground), darker reverb,
+38 Hz highpass. **THE MIX LAW (quantified, now Slice B acceptance criteria):**
+steady-state stem targets — FIGURATION ≈ −19 dBFS (3–5 dB ABOVE the combined
+bed), LEAD ≈ −21, GROUND ≈ −23, CHORD bed ≈ −25 concurrency-normalized,
+WEATHER ≈ −34; motion in front, vastness behind. Slice B's audio layer must
+implement + assert these as measured stem levels, and must NOT voice weather in
+unison with ground. Engine-side note for B: consider weather events carrying a
+distinct register/timbre hint so renderers cannot repeat this mistake.
+Shambu's v2 listen is the reopened ear gate.
+
+**◇ STRATEGY CHECKPOINT + v2 VERDICT — 2026-08-08.** Shambu on v2: "much
+better, a good starting point" — but still lacking FORM (rhythms, patterns,
+build-ups, transitions-like-mixing), and he challenged whether the path
+converges. HQ diagnosis ratified: A3 over-corrected the transition note into
+imperceptible drift; repetition belongs at MESO (patterns must be learnable),
+non-repetition at MACRO — we had it inverted. His "lead music toward a pattern,
+shift like a DJ mix" model formalized as the FORM LAYER (see MUSICAL_VISION
+addendum §6b): movements anchored to real sky structures, motif-as-ostinato,
+transitions as first-class objects, pattern-vocabulary = composed clothing
+under the truth covenant. Process rule added: form iterates in HQ sketches
+before engine code. EXECUTED: vision amended; **sketch v3** composed from the
+true A3 score (5 movements — Polaris/Cygnus · Still Night · Andromeda ·
+Bloom-build with Zimmer additive layers peaking at Aldebaran 449 s · Gemini/
+Return — 12–16 s crossfade transitions with breath swells, real motifs replayed
+as section grooves, v2 mix law); **UX bar sketch** rendered (all 4,279 true
+stars above Bengaluru at the birth moment, B–V-coloured, magnitude-sized,
+sounding stars haloed — feasibility answer to the NASA-crisp requirement).
+Both delivered. Confidence caveat logged at Shambu's prompt: two of three
+musical hypotheses failed before one landed; gates remain the only authority.
+NEXT: his v3 ear verdict (form) + visual verdict (bar) → then A4 movement-
+planner spec from the approved sketch → then Slice B instruments + mix law.
