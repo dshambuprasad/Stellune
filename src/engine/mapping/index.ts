@@ -130,3 +130,15 @@ export {
   figurationNotesInRange,
   noteRateAt,
 } from './figuration.ts';
+
+// Slice A4 — the Form Layer
+export type {
+  PatternName,
+  FigurationPattern,
+  Movement,
+  MovementAnchor,
+  MovementPlan,
+  FormPosition,
+} from './movement.ts';
+export { PATTERN_VOCABULARY, patternByName, planMovements, formAt } from './movement.ts';
+export { bloomLayersAt } from './figuration.ts';

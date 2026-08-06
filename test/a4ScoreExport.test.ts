@@ -1,5 +1,5 @@
 /**
- * HQ audition-path export (Atlas HQ, A3 review).
+ * HQ audition-path export (Atlas HQ, A4 review).
  *
  * The browser render is too slow for the ear gate (~30 min/session), so HQ
  * renders the TRUE engine score with its own offline synthesizer instead. This
@@ -38,7 +38,7 @@ const BENGALURU: ObserverInput = {
   tzOffsetMinutes: 330,
 };
 
-describe('A3 score export for the HQ audition render', () => {
+describe('A4 score export for the HQ audition render', () => {
   it('exports the full birth-sky session and 3 min of endless mode', () => {
     const birthPlan: SessionPlan = prepareSession(catalog, BENGALURU, {});
     const anyPlan = birthPlan as unknown as Record<string, any>;
@@ -52,14 +52,43 @@ describe('A3 score export for the HQ audition render', () => {
 
     expect(birth.events.length).toBeGreaterThan(50);
     expect(endless.events.length).toBeGreaterThan(20);
+    expect(birthPlan.movementPlan.movements.length).toBeGreaterThan(2);
+    expect(
+      birthPlan.movementPlan.movements.some((m) => m.anchor.kind === 'bloom'),
+    ).toBe(true);
+
+    // A4 adds the form layer, so the export carries the movement plan too — HQ's
+    // renderer can then mix each section on its own terms and, more importantly,
+    // the movement boundaries are auditable without re-deriving them.
+    const summarise = (p: SessionPlan) =>
+      p.movementPlan.movements.map((m) => ({
+        index: m.index,
+        fromSeconds: m.fromSeconds,
+        toSeconds: m.toSeconds,
+        transitionSeconds: m.transitionSeconds,
+        pattern: m.pattern,
+        registerOffset: m.registerOffset,
+        anchor: m.anchor,
+        motif: m.motif ? { constellation: m.motif.constellation, degrees: m.motif.degrees } : null,
+      }));
 
     const payload = {
       exportedFor: 'Atlas HQ audition render (sketch-voice synthesizer)',
-      birth: { sessionSeconds: T, window: birth },
-      endless: { seconds: 180, window: endless },
+      birth: {
+        sessionSeconds: T,
+        movements: summarise(birthPlan),
+        bloomSeconds: birthPlan.bloomSeconds,
+        window: birth,
+      },
+      endless: {
+        seconds: 180,
+        movements: summarise(endlessPlan),
+        horizonSeconds: endlessPlan.movementPlan.horizonSeconds,
+        window: endless,
+      },
     };
     writeFileSync(
-      fileURLToPath(new URL('../docs/a3-score.json', import.meta.url)),
+      fileURLToPath(new URL('../docs/a4-score.json', import.meta.url)),
       JSON.stringify(payload),
     );
   });

@@ -30,6 +30,7 @@ import {
 } from './skyWeather.ts';
 import { scaleDegrees, type ScaleName } from './scales.ts';
 import { deriveAllMotifs, type Motif } from './motif.ts';
+import { planMovements, type MovementPlan } from './movement.ts';
 import type { ArcState, LivingSkyConfig, SkyWeather } from './types.ts';
 
 const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
@@ -83,6 +84,16 @@ export const DEFAULT_LIVING_SKY_CONFIG: LivingSkyConfig = {
   figurationRegisterHighOctave: 2.1,
   figurationMaxRateStep: 0.3,
 
+  movementMinSeconds: 60,
+  movementMaxSeconds: 120,
+  movementLeadInSeconds: 8,
+  transitionSecondsRange: [12, 16],
+  bloomBuildSeconds: 50,
+  ostinatoEveryCycles: 4,
+  bloomLayerEveryCycles: 2,
+  bloomMaxLayers: 3,
+  formMaxRateStep: 0.3,
+
   continuousSegmentSeconds: 30,
   modulatorPeriods: [1123, 1811, 2417, 3299],
 };
@@ -128,6 +139,8 @@ export interface SessionPlan {
    * Memo for coarse weather samples. Pure caching — it never changes what is
    * produced, only how often the catalogue has to be walked.
    */
+  /** The form: movements, their patterns, and the transitions between them. */
+  movementPlan: MovementPlan;
   weatherCache: Map<number, SkyWeather>;
   /**
    * Memo for the sounding-chord-tone set, on an absolute grid. Pure caching: the
@@ -374,6 +387,19 @@ export function prepareSession(
     }
   }
 
+  // ---- the form layer, computed once so `renderWindow` only ever reads it
+  const movementPlan = planMovements({
+    config,
+    motifs,
+    motifStars,
+    latitude: observer.latitude,
+    lst0,
+    kappa,
+    bloomSeconds: config.mode === 'birth-sky' ? solved.bloomSeconds : null,
+    bloomStarId: solved.bloomStarId,
+    openingStarId,
+  });
+
   return {
     observer,
     config,
@@ -394,6 +420,7 @@ export function prepareSession(
     leadStars,
     motifs,
     motifStars,
+    movementPlan,
     weatherCache: new Map(),
     toneCache: new Map(),
   };

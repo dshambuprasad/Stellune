@@ -264,9 +264,11 @@ function figurationEvents(plan: SessionPlan, from: number, to: number): MusicalE
     twinkle: note.twinkle,
     startSeconds: note.startSeconds,
     durationSeconds: note.durationSeconds,
+    ...(note.motifId ? { motifId: note.motifId } : {}),
     origin: {
-      kind: 'visible' as const,
+      kind: (note.motifId ? 'constellation' : 'visible') as 'constellation' | 'visible',
       starId: note.starId,
+      ...(note.motifId ? { constellation: note.motifId } : {}),
       skySeconds: round(note.startSeconds * plan.kappa, 3),
     },
   }));

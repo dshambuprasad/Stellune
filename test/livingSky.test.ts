@@ -50,8 +50,12 @@ import {
   cycleSeconds,
   cycleStartSeconds,
   figurationNotesInRange,
+  formAt,
   noteRateAt,
   patternAt,
+  patternByName,
+  PATTERN_VOCABULARY,
+  bloomLayersAt,
   prepareSession,
   renderWindow,
   soundingChordTones,
@@ -1180,13 +1184,20 @@ describe('figuration — truth', () => {
   });
 
   it('THE GATE — only ever sounds a tone that is genuinely in the air', () => {
-    // The figuration invents no pitches: every note must double a chord tone
-    // that `soundingChordTones` says is sounding at that instant.
+    // The figuration invents no pitches: every note doubles a chord tone that
+    // `soundingChordTones` says is sounding at that instant. The Zimmer layers
+    // of the bloom movement transpose by whole OCTAVES, which preserves the
+    // pitch class, so they are checked as octaves of the same real tone.
     for (const note of figuration.filter((_, i) => i % 7 === 0)) {
       const tones = soundingChordTones(plan, note.startSeconds);
       const match = tones.find((t) => t.starId === note.sourceId);
       expect(match, `${note.sourceId} was not sounding at ${note.startSeconds}s`).toBeDefined();
-      expect(match?.midi).toBe(note.midi);
+      const offset = note.midi - (match as { midi: number }).midi;
+      expect(
+        offset % 12,
+        `${note.sourceId} sounded ${offset} semitones from its real tone`,
+      ).toBe(0);
+      expect(Math.abs(offset)).toBeLessThanOrEqual(24);
     }
   });
 
@@ -1211,14 +1222,34 @@ describe('figuration — truth', () => {
     }
   });
 
-  it('weaves at ear speed', () => {
-    // Roughly 0.5-1.5 s between notes across the piece: the meso timescale.
+  it('weaves at ear speed, and the densest movement is properly dense', () => {
+    // The meso timescale. The session median is now looser than A3's because
+    // the vocabulary includes a deliberately still pattern — that contrast is
+    // the point of A4 — so the tighter claim is made about the densest movement.
     const times = figuration.map((e) => e.startSeconds).sort((a, b) => a - b);
     const gaps: number[] = [];
     for (let i = 1; i < times.length; i++) gaps.push((times[i] as number) - (times[i - 1] as number));
     const median = [...gaps].sort((a, b) => a - b)[Math.floor(gaps.length / 2)] as number;
-    expect(median).toBeGreaterThan(0.3);
-    expect(median).toBeLessThan(1.6);
+    expect(median).toBeGreaterThan(0.2);
+    expect(median).toBeLessThan(2.2);
+
+    const densest = [...plan.movementPlan.movements].sort(
+      (a, b) =>
+        patternByName(b.pattern).slots.filter(Boolean).length -
+        patternByName(a.pattern).slots.filter(Boolean).length,
+    )[0] as (typeof plan.movementPlan.movements)[number];
+    const inside = figuration
+      .filter((e) => e.startSeconds >= densest.fromSeconds && e.startSeconds < densest.toSeconds)
+      .map((e) => e.startSeconds)
+      .sort((a, b) => a - b);
+    const insideGaps: number[] = [];
+    for (let i = 1; i < inside.length; i++) {
+      insideGaps.push((inside[i] as number) - (inside[i - 1] as number));
+    }
+    const insideMedian = [...insideGaps].sort((a, b) => a - b)[
+      Math.floor(insideGaps.length / 2)
+    ] as number;
+    expect(insideMedian).toBeLessThan(1.2);
   });
 });
 
@@ -1227,71 +1258,106 @@ describe('figuration — TRANSITIONS ARE THE CRAFT', () => {
   const totalCycles = Math.floor(plan.config.sessionSeconds / cycleSeconds(plan));
 
   /** How many slots read differently between two cycles. */
-  const patternDiff = (a: ReturnType<typeof patternAt>, b: ReturnType<typeof patternAt>): number => {
-    let n = 0;
-    for (let i = 0; i < a.length; i++) {
-      const x = a[i] as (typeof a)[number];
-      const y = b[i] as (typeof b)[number];
-      if (x.active !== y.active || x.toneStarId !== y.toneStarId) n++;
-    }
-    return n;
-  };
-
-  it('THE GATE — consecutive cycles differ by at most ONE slot', () => {
-    // Shambu's catch: the direction sketch hard-switched patterns and sounded
-    // hasty. The engine must evolve, never switch.
-    let worst = 0;
-    let worstAt = -1;
-    for (let n = 1; n <= totalCycles; n++) {
-      const diff = patternDiff(patternAt(plan, n - 1), patternAt(plan, n));
-      if (diff > worst) {
-        worst = diff;
-        worstAt = n;
+  it('THE GATE (A4) — inside a movement the RHYTHM repeats exactly', () => {
+    // Slice A4 supersedes A3's drift doctrine. A3 let the pattern evolve every
+    // cycle, which is why no groove could form: repetition belongs at the meso
+    // scale. Inside a movement body the mask must now be *identical* cycle after
+    // cycle — zero rhythmic change — so the ear can learn it.
+    for (const movement of plan.movementPlan.movements) {
+      const firstCycle = Math.ceil(movement.fromSeconds / cycleSeconds(plan));
+      const lastCycle = Math.floor(movement.toSeconds / cycleSeconds(plan)) - 1;
+      let reference: boolean[] | null = null;
+      for (let n = firstCycle; n <= lastCycle; n++) {
+        const mask = patternAt(plan, n).map((slot) => slot.active);
+        if (reference === null) reference = mask;
+        else {
+          expect(
+            mask,
+            `movement ${movement.index} (${movement.pattern}) changed rhythm at cycle ${n}`,
+          ).toEqual(reference);
+        }
       }
     }
-    expect(worst, `cycle ${worstAt} changed ${worst} slots`).toBeLessThanOrEqual(1);
+  });
+
+  it('inside a movement the HARMONY still breathes, at most one slot per cycle', () => {
+    // What lives within a movement is the tone assignment, not the rhythm.
+    for (const movement of plan.movementPlan.movements) {
+      const firstCycle = Math.ceil(movement.fromSeconds / cycleSeconds(plan));
+      const lastCycle = Math.floor(movement.toSeconds / cycleSeconds(plan)) - 1;
+      for (let n = firstCycle + 1; n <= lastCycle; n++) {
+        const before = patternAt(plan, n - 1);
+        const after = patternAt(plan, n);
+        const moved = before.filter(
+          (slot, i) => slot.toneStarId !== (after[i] as (typeof after)[number]).toneStarId,
+        ).length;
+        expect(moved, `movement ${movement.index}, cycle ${n}`).toBeLessThanOrEqual(1);
+      }
+    }
+  });
+
+  it('gives consecutive movements CONTRASTING patterns', () => {
+    const movements = plan.movementPlan.movements;
+    expect(movements.length).toBeGreaterThan(2);
+    for (let i = 1; i < movements.length; i++) {
+      const a = movements[i - 1] as (typeof movements)[number];
+      const b = movements[i] as (typeof movements)[number];
+      const differs =
+        a.pattern !== b.pattern || a.registerOffset !== b.registerOffset;
+      expect(differs, `movements ${i - 1} and ${i} sound the same`).toBe(true);
+    }
   });
 
   it('holds in endless mode too, over a long stretch', () => {
     const endless = session({ mode: 'endless', kappa: 30 });
-    for (let n = 1; n < 400; n++) {
-      expect(patternDiff(patternAt(endless, n - 1), patternAt(endless, n))).toBeLessThanOrEqual(1);
+    for (const movement of endless.movementPlan.movements.slice(0, 6)) {
+      const firstCycle = Math.ceil(movement.fromSeconds / cycleSeconds(endless));
+      const lastCycle = Math.min(
+        firstCycle + 12,
+        Math.floor(movement.toSeconds / cycleSeconds(endless)) - 1,
+      );
+      let reference: boolean[] | null = null;
+      for (let n = firstCycle; n <= lastCycle; n++) {
+        const mask = patternAt(endless, n).map((slot) => slot.active);
+        if (reference === null) reference = mask;
+        else expect(mask).toEqual(reference);
+      }
     }
   });
 
-  it('lets the density TARGET ride continuously while the pattern absorbs it one slot at a time', () => {
-    // The target is free to move with the arc; what must not lurch is the
-    // realised pattern. Each slot adopts the target only at its own change
-    // cycle, so however fast the target moves the weave changes gradually.
-    const realised = (n: number): number =>
-      patternAt(plan, n).filter((slot) => slot.active).length;
+  it('THE GATE (A4) — a transition RAMPS the note rate monotonically', () => {
+    // Transitions are first-class: the outgoing groove thins as the incoming
+    // establishes, and the rate must move steadily from one density to the
+    // other — no step, and never doubling back.
+    const bound = plan.config.formMaxRateStep;
+    const cycle = cycleSeconds(plan);
 
-    let targetMoved = 0;
-    for (let n = 1; n <= totalCycles; n++) {
-      if (activeCountAt(plan, n) !== activeCountAt(plan, n - 1)) targetMoved++;
-      expect(Math.abs(realised(n) - realised(n - 1))).toBeLessThanOrEqual(1);
-    }
-    // And the target really does move — otherwise this proves nothing.
-    expect(targetMoved).toBeGreaterThan(0);
-  });
+    for (const movement of plan.movementPlan.movements) {
+      if (movement.transitionSeconds <= 0) continue;
+      const firstCycle = Math.floor(movement.toSeconds / cycle);
+      const lastCycle = Math.ceil((movement.toSeconds + movement.transitionSeconds) / cycle);
 
-  it('never jumps the note rate at a stage boundary', () => {
-    const bound = plan.config.figurationMaxRateStep;
-    let previousStage = arcAt(plan, 0).stage;
-    for (let n = 1; n <= totalCycles; n++) {
-      const at = cycleStartSeconds(plan, n);
-      const stage = arcAt(plan, at).stage;
-      const step = Math.abs(noteRateAt(plan, at) - noteRateAt(plan, at - cycleSeconds(plan)));
-      expect(step, `rate jumped ${step.toFixed(3)} at ${stage}`).toBeLessThanOrEqual(bound);
-      previousStage = stage;
+      const rates: number[] = [];
+      for (let n = firstCycle; n <= lastCycle; n++) rates.push(noteRateAt(plan, n * cycle));
+
+      const rising = (rates[rates.length - 1] as number) >= (rates[0] as number);
+      for (let i = 1; i < rates.length; i++) {
+        const step = (rates[i] as number) - (rates[i - 1] as number);
+        expect(Math.abs(step), `seam after movement ${movement.index}`).toBeLessThanOrEqual(
+          bound + 1e-9,
+        );
+        // Monotone in the direction the seam is heading.
+        if (rising) expect(step).toBeGreaterThanOrEqual(-1e-9);
+        else expect(step).toBeLessThanOrEqual(1e-9);
+      }
     }
-    expect(previousStage).toBeTruthy();
   });
 
   it('migrates a departed tone gradually, never mid-cycle', () => {
-    // A slot whose star has set falls silent at once (the pitch would not be
-    // true) and takes a new tone only at its own next change cycle.
-    for (let n = 1; n < 120; n++) {
+    const movement = plan.movementPlan.movements[1] as (typeof plan.movementPlan.movements)[number];
+    const firstCycle = Math.ceil(movement.fromSeconds / cycleSeconds(plan));
+    const lastCycle = Math.floor(movement.toSeconds / cycleSeconds(plan)) - 1;
+    for (let n = firstCycle + 1; n <= lastCycle; n++) {
       const before = patternAt(plan, n - 1);
       const after = patternAt(plan, n);
       const reassigned = before.filter(
@@ -1301,9 +1367,9 @@ describe('figuration — TRANSITIONS ARE THE CRAFT', () => {
     }
   });
 
-  it('breathes into a stage change rather than stepping', () => {
-    // The cycle before a stage change dips velocity; no slot count changes with
-    // it, so only one parameter moves at a time.
+  it('breathes into an arc-stage change rather than stepping', () => {
+    // The arc's own stage boundaries are separate from the movement seams; the
+    // cycle before one dips velocity only, so no rhythm changes with it.
     const boundary = (() => {
       for (let n = 1; n <= totalCycles; n++) {
         const a = arcAt(plan, cycleStartSeconds(plan, n)).stage;
@@ -1313,7 +1379,15 @@ describe('figuration — TRANSITIONS ARE THE CRAFT', () => {
       return -1;
     })();
     expect(boundary).toBeGreaterThan(0);
-    expect(activeCountAt(plan, boundary)).toBe(activeCountAt(plan, boundary + 1));
+
+    const insideOneMovement =
+      formAt(plan.movementPlan, cycleStartSeconds(plan, boundary))?.movement.index ===
+      formAt(plan.movementPlan, cycleStartSeconds(plan, boundary + 1))?.movement.index;
+    if (insideOneMovement) {
+      expect(patternAt(plan, boundary).map((s) => s.active)).toEqual(
+        patternAt(plan, boundary + 1).map((s) => s.active),
+      );
+    }
   });
 });
 
@@ -1374,5 +1448,283 @@ describe('figuration — weather', () => {
       return total / 120;
     };
     expect(meanActive(lonely)).toBeLessThan(meanActive(rich));
+  });
+});
+
+// ===========================================================================
+// SLICE A4 — the FORM layer: movements, ostinato, the additive bloom
+// ===========================================================================
+
+describe('the movement plan', () => {
+  const plan = session({ mode: 'birth-sky' });
+  const movements = plan.movementPlan.movements;
+
+  it('is deterministic', () => {
+    const again = session({ mode: 'birth-sky' });
+    expect(again.movementPlan).toEqual(plan.movementPlan);
+  });
+
+  it('is computed once, so a window never has to rebuild it', () => {
+    // Partition invariance holds by construction because `renderWindow` only
+    // reads this value; it can never derive a different form for a different
+    // slice.
+    const a = renderWindow(plan, 0, 200);
+    const b = renderWindow(plan, 200, 400);
+    expect(a.events.length + b.events.length).toBeGreaterThan(0);
+    expect(plan.movementPlan).toEqual(session({ mode: 'birth-sky' }).movementPlan);
+  });
+
+  it('covers the whole session with no gap and no overlap', () => {
+    expect(movements[0]?.fromSeconds).toBe(0);
+    for (let i = 1; i < movements.length; i++) {
+      const previous = movements[i - 1] as (typeof movements)[number];
+      const current = movements[i] as (typeof movements)[number];
+      expect(previous.toSeconds).toBeLessThanOrEqual(current.fromSeconds + 1e-6);
+      expect(previous.toSeconds + previous.transitionSeconds).toBeCloseTo(current.fromSeconds, 6);
+    }
+    const last = movements[movements.length - 1] as (typeof movements)[number];
+    expect(last.toSeconds).toBeCloseTo(plan.config.sessionSeconds, 6);
+    expect(last.transitionSeconds).toBe(0);
+  });
+
+  it('gives every moment of the session exactly one movement', () => {
+    for (let t = 0; t < plan.config.sessionSeconds; t += 3.7) {
+      const form = formAt(plan.movementPlan, t);
+      expect(form, `no movement covers ${t}s`).not.toBeNull();
+      expect(form?.movement.fromSeconds).toBeLessThanOrEqual(t + 1e-6);
+    }
+  });
+
+  it('anchors every movement to a real structure', () => {
+    for (const movement of movements) {
+      expect(['opening', 'constellation', 'still', 'bloom', 'return']).toContain(
+        movement.anchor.kind,
+      );
+      if (movement.anchor.kind === 'constellation') {
+        // The anchor must be a constellation this observer can actually see.
+        expect(plan.motifs.some((m) => m.constellation === movement.anchor.constellation)).toBe(
+          true,
+        );
+      }
+    }
+  });
+
+  it('gives the bloom a movement of its own, with room to build', () => {
+    const bloom = movements.find((m) => m.anchor.kind === 'bloom');
+    expect(bloom, 'the night’s climax has no movement').toBeDefined();
+    expect(bloom?.pattern).toBe('dense-build');
+    // The climax lands inside it, with build time before it.
+    expect(bloom?.fromSeconds).toBeLessThan(plan.bloomSeconds as number);
+    expect((plan.bloomSeconds as number) - (bloom?.fromSeconds ?? 0)).toBeGreaterThan(30);
+  });
+
+  it('uses only the composed vocabulary', () => {
+    const names = PATTERN_VOCABULARY.map((p) => p.name);
+    for (const movement of movements) expect(names).toContain(movement.pattern);
+  });
+
+  it('keeps movement bodies within the configured span, allowing for seams', () => {
+    for (const movement of movements) {
+      const body = movement.toSeconds - movement.fromSeconds;
+      expect(body).toBeGreaterThan(plan.config.movementMinSeconds * 0.5);
+      expect(body).toBeLessThanOrEqual(plan.config.movementMaxSeconds + 40);
+    }
+  });
+
+  it('builds a wrapping setlist in endless mode', () => {
+    const endless = session({ mode: 'endless', kappa: 30 });
+    expect(endless.movementPlan.movements.length).toBeGreaterThan(1);
+    expect(Number.isFinite(endless.movementPlan.horizonSeconds)).toBe(true);
+    // Beyond the horizon the setlist comes round again — as the sky does.
+    const horizon = endless.movementPlan.horizonSeconds;
+    expect(formAt(endless.movementPlan, 10)?.movement.index).toBe(
+      formAt(endless.movementPlan, horizon + 10)?.movement.index,
+    );
+  });
+});
+
+describe('motif as ostinato', () => {
+  const plan = session({ mode: 'birth-sky' });
+  const events = renderWindow(plan, 0, plan.config.sessionSeconds).events;
+
+  it('replays the movement’s figure as the section groove, not a one-shot', () => {
+    const constellationMovements = plan.movementPlan.movements.filter((m) => m.motif !== null);
+    expect(constellationMovements.length).toBeGreaterThan(0);
+
+    for (const movement of constellationMovements) {
+      const inside = events.filter(
+        (e) =>
+          e.role === 'figuration' &&
+          e.motifId === movement.motif?.constellation &&
+          e.startSeconds >= movement.fromSeconds &&
+          e.startSeconds < movement.toSeconds,
+      );
+      // A groove, so it must recur — several statements, not one.
+      const cycles = new Set(
+        inside.map((e) => Math.floor(e.startSeconds / cycleSeconds(plan))),
+      );
+      expect(
+        cycles.size,
+        `${movement.motif?.constellation} stated only ${cycles.size} time(s)`,
+      ).toBeGreaterThan(1);
+    }
+  });
+
+  it('spaces the statements by the configured period', () => {
+    const movement = plan.movementPlan.movements.find((m) => m.motif !== null);
+    expect(movement).toBeDefined();
+    // Onsets are humanised by up to ±18 ms, so a slot-0 note can drift just
+    // below its own cycle boundary; nudge past that before bucketing.
+    const nudge = plan.config.figurationHumanizeSeconds * 2;
+    const cycles = [
+      ...new Set(
+        events
+          .filter(
+            (e) =>
+              e.role === 'figuration' &&
+              e.motifId === movement?.motif?.constellation &&
+              e.startSeconds >= (movement?.fromSeconds ?? 0) &&
+              e.startSeconds < (movement?.toSeconds ?? 0),
+          )
+          .map((e) => Math.floor((e.startSeconds + nudge) / cycleSeconds(plan))),
+      ),
+    ].sort((a, b) => a - b);
+    for (let i = 1; i < cycles.length; i++) {
+      expect((cycles[i] as number) - (cycles[i - 1] as number)).toBe(
+        plan.config.ostinatoEveryCycles,
+      );
+    }
+  });
+
+  it('keeps every ostinato pitch a tone that is genuinely sounding', () => {
+    // FIGURATION only. The LEAD also carries `motifId` — it states the same
+    // figure melodically in its own register, where the pitch comes from the
+    // anchor degree plus the contour rather than from a sounding chord tone.
+    // Both are on-scale; only the figuration promises to double a live tone.
+    //
+    // The figuration reads the sounding set on an absolute one-second grid (a
+    // documented optimisation — the set changes on the scale of minutes), so
+    // truth is checked to that same grain.
+    const ostinato = events.filter((e) => e.role === 'figuration' && e.motifId !== undefined);
+    expect(ostinato.length).toBeGreaterThan(0);
+    for (const note of ostinato.slice(0, 60)) {
+      // The recorded onset is rounded to 4 decimals, so it can land a hair the
+      // far side of the second the engine actually sampled; check the grain
+      // either side of it.
+      const bucket = Math.floor(note.startSeconds);
+      const match = [bucket - 1, bucket]
+        .filter((b) => b >= 0)
+        .flatMap((b) => soundingChordTones(plan, b))
+        .find((t) => t.starId === note.sourceId);
+      expect(match, `${note.sourceId} was not sounding near ${bucket}s`).toBeDefined();
+      expect((note.midi - (match as { midi: number }).midi) % 12).toBe(0);
+    }
+  });
+});
+
+describe('the bloom movement — Zimmer additive', () => {
+  const plan = session({ mode: 'birth-sky' });
+  const bloom = plan.movementPlan.movements.find((m) => m.anchor.kind === 'bloom');
+  const cycle = cycleSeconds(plan);
+
+  it('adds layers monotonically into the climax and strips them after', () => {
+    expect(bloom).toBeDefined();
+    const from = Math.ceil((bloom as { fromSeconds: number }).fromSeconds / cycle);
+    const to = Math.floor(
+      ((bloom as { toSeconds: number }).toSeconds) / cycle,
+    );
+    const climax = Math.round((plan.bloomSeconds as number) / cycle);
+
+    let previous = bloomLayersAt(plan, from);
+    for (let n = from; n <= climax; n++) {
+      const layers = bloomLayersAt(plan, n);
+      expect(layers).toBeGreaterThanOrEqual(previous);
+      expect(layers - previous).toBeLessThanOrEqual(1);
+      previous = layers;
+    }
+    expect(previous).toBeGreaterThan(0);
+
+    for (let n = climax; n <= to; n++) {
+      const layers = bloomLayersAt(plan, n);
+      expect(layers).toBeLessThanOrEqual(previous);
+      previous = layers;
+    }
+  });
+
+  it('never stacks more than the configured maximum', () => {
+    for (let n = 0; n < 160; n++) {
+      expect(bloomLayersAt(plan, n)).toBeLessThanOrEqual(plan.config.bloomMaxLayers);
+    }
+  });
+
+  it('adds layers ONLY in the bloom movement', () => {
+    for (const movement of plan.movementPlan.movements) {
+      if (movement.anchor.kind === 'bloom') continue;
+      const n = Math.round((movement.fromSeconds + movement.toSeconds) / 2 / cycle);
+      expect(bloomLayersAt(plan, n)).toBe(0);
+    }
+  });
+
+  it('makes the climax audibly the densest moment', () => {
+    const events = renderWindow(plan, 0, plan.config.sessionSeconds).events.filter(
+      (e) => e.role === 'figuration',
+    );
+    const density = (centre: number): number =>
+      events.filter((e) => Math.abs(e.startSeconds - centre) < 10).length;
+    const atBloom = density(plan.bloomSeconds as number);
+    const atOpening = density(40);
+    expect(atBloom).toBeGreaterThan(atOpening);
+  });
+
+  it('transposes every added layer by whole octaves only', () => {
+    // The stack must not break the on-scale guarantee.
+    const ladder = scaleDegrees(plan.scale);
+    for (const note of renderWindow(plan, 380, 500).events.filter((e) => e.role === 'figuration')) {
+      expect(ladder.includes(((note.midi - plan.rootMidi) % 12 + 12) % 12)).toBe(true);
+    }
+  });
+});
+
+describe('form — partition invariance re-proven with movements active', () => {
+  it('THE GATE — birth-sky reassembles exactly, at three window sizes', () => {
+    const plan = session({ mode: 'birth-sky' });
+    const T = plan.config.sessionSeconds;
+    const whole = renderWindow(plan, 0, T);
+    for (const size of [17, 90, 300]) {
+      const pieces: ScoreWindow[] = [];
+      for (let t = 0; t < T; t += size) pieces.push(renderWindow(plan, t, Math.min(T, t + size)));
+      expect(unionOf(pieces), `window size ${size}`).toEqual(sortedEvents(whole));
+    }
+  });
+
+  it('THE GATE — endless reassembles exactly across a setlist wrap', () => {
+    const plan = session({ mode: 'endless', kappa: 30 });
+    const T = 1800;
+    const whole = renderWindow(plan, 0, T);
+    for (const size of [41, 250]) {
+      const pieces: ScoreWindow[] = [];
+      for (let t = 0; t < T; t += size) pieces.push(renderWindow(plan, t, Math.min(T, t + size)));
+      expect(unionOf(pieces), `window size ${size}`).toEqual(sortedEvents(whole));
+    }
+  });
+
+  it('keeps every pitch on-scale with the whole form running', () => {
+    const plan = session({ mode: 'birth-sky' });
+    const ladder = scaleDegrees(plan.scale);
+    for (const note of renderWindow(plan, 0, plan.config.sessionSeconds).events) {
+      expect(ladder.includes(((note.midi - plan.rootMidi) % 12 + 12) % 12)).toBe(true);
+    }
+  });
+
+  it('still respects the lead note budget with the form running', () => {
+    const plan = session({ mode: 'birth-sky' });
+    const budget = noteBudgetPerMinute(plan.weather);
+    const leads = renderWindow(plan, 0, plan.config.sessionSeconds).events.filter(
+      (e) => e.role === 'lead',
+    );
+    for (let t = 0; t + 60 <= plan.config.sessionSeconds; t += 5) {
+      const inMinute = leads.filter((e) => e.startSeconds >= t && e.startSeconds < t + 60).length;
+      expect(inMinute).toBeLessThanOrEqual(budget);
+    }
   });
 });

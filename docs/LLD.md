@@ -810,3 +810,154 @@ yields entirely and is immune to timer throttling.
 AnalyserNode). Live, the star-field needs them; offline nobody ever calls
 `getLevels()`, and a long session creates hundreds of notes. They are now opt-out
 and off for offline renders.
+
+---
+
+# 8. The FORM layer (Slice A4)
+
+`src/engine/mapping/movement.ts` — the Movement Planner, realizing Musical
+Vision §6b after the v2 listen ("still lacks rhythms, patterns, building up,
+transitions").
+
+## 8.1 The doctrine A3 had inverted
+
+- **Repetition belongs at the MESO scale.** A pattern must repeat long enough to
+  be *learned*, or it never becomes a groove. A3 changed a slot every cycle, so
+  nothing could settle.
+- **Non-repetition belongs at the MACRO scale.** The piece never returns to the
+  same state.
+
+A4 therefore fixes the rhythm inside a movement and moves the contrast to the
+boundaries between movements.
+
+## 8.2 Where it lives, and why that guarantees purity
+
+The whole plan is computed **once**, inside `prepareSession`, and stored on the
+`SessionPlan`. `renderWindow` only ever reads it. Partition invariance is
+therefore structural: a window cannot derive a different form for a different
+slice, because it derives no form at all.
+
+## 8.3 Partitioning
+
+Candidate structures are the constellation prominences (same definition the
+Conductor uses — every motif star up, group mean altitude past threshold, at the
+group's meridian crossing) plus the bloom.
+
+**The bloom is placed first and is mandatory.** Taking candidates purely in time
+order let a constellation claim the boundary just before the climax; the bloom
+then failed the minimum-length test and got no movement of its own, so the
+additive build had nowhere to happen. The night's climax outranks every other
+structure and reserves its section before anything else may.
+
+Remaining candidates are accepted in time order if they clear
+`movementMinSeconds` from every boundary already taken. Any stretch longer than
+`movementMaxSeconds` is split, and those unanchored sections become the *still*
+movements — which is itself a fact about the night.
+
+## 8.4 The pattern vocabulary (composed clothing, labelled)
+
+Five patterns, seeded from HQ's ear-approved v3 sketch, as 8-slot masks:
+
+| Pattern | Mask | Register | Velocity |
+| --- | --- | --- | --- |
+| `sparse-low` | `x···x···` | −1 | 0.80 |
+| `half-time-still` | `x·······` | −1 | 0.70 |
+| `mid-weave` | `x·x·x·x·` | 0 | 0.90 |
+| `dense-build` | `xxx·xxx·` | +1 | 1.00 |
+| `thinning-return` | `x··x··x·` | 0 | 0.75 |
+
+Assignment follows the arc: opening → `sparse-low`, the bloom → `dense-build`,
+the last movement → `thinning-return`, an unanchored or long section →
+`half-time-still`, otherwise `mid-weave`. Two adjacent movements are never given
+the same pattern — that would read as one long section with a bump in it.
+
+**The truth boundary:** the sky decides *which* patterns, *when*, *how dense*,
+*in what harmony* and *toward what climax*. The vocabulary itself is composed
+clothing, the same covenant category as timbre and tempo.
+
+## 8.5 Transitions as first-class objects
+
+A seam is `[toSeconds, toSeconds + transitionSeconds)`. Across it the mask
+crossfades: the active count is the interpolated density, the incoming pattern's
+own slots are taken first (so the new groove is what emerges, not a blur), and
+the outgoing pattern holds the remainder until it is gone. A breath swell
+(±18% velocity, a half-sine over the seam) marks the join as a gesture.
+
+Two constraints set the seam's length, and it must satisfy both:
+
+1. the note rate may not move faster than `formMaxRateStep`;
+2. **the mask is integer-valued, so it cannot move more than one slot per cycle
+   without an audible step** — five slots cannot be crossed in four cycles
+   whatever the average rate says.
+
+The second is usually binding, and missing it left a two-slot jump at the seam
+into the bloom. Seams therefore run `max(12–16 s, gap × cycle)`; the widest pair
+in the vocabulary (1 slot against 6) needs 22 s, which is a longer mix for a
+bigger change — as it should be.
+
+A third subtlety: every pattern here sounds slot 0, so the two crossfade passes
+can *share* a slot and fall short of the target count. A top-up pass fills from
+whatever remains, incoming first, so the count is exactly the interpolated one.
+
+## 8.6 Motif as ostinato
+
+During a constellation's movement its figure returns every
+`ostinatoEveryCycles` (4) — the section's groove, not a one-shot chime. Each
+contour degree lands on the **nearest currently-sounding chord tone**, so the
+shape is the constellation's real geometry and every pitch is a tone genuinely
+in the air.
+
+Note that the LEAD also states motifs, and does so differently: melodically, in
+its own register, from the anchor degree plus the contour. Both are on-scale;
+only the figuration promises to double a live tone. The tests keep them apart.
+
+## 8.7 The bloom movement — Zimmer additive
+
+Inside the bloom movement one layer is added every `bloomLayerEveryCycles` on
+the way up and removed in reverse on the way down:
+
+1. octave doubling (+12, half gain)
+2. off-beat echo (half a slot later, ⅓ gain)
+3. high sparkle (+24 on slot 0 only, ⅕ gain)
+
+Every layer is a whole-octave transposition, so the on-scale guarantee is
+untouched. `bloomLayersAt` is a pure function of the cycle's distance from the
+climax — nothing accumulates.
+
+Measured on the Bengaluru session: layers ramp `1 1 2 2 3 3 3 3 3 3 3` into the
+climax and strip `2 2 1 1` after it.
+
+## 8.8 The Bengaluru session, and how it compares to the approved sketch
+
+κ 66.40×, A dorian, bloom = Aldebaran at 449 s, cycle 4.40 s:
+
+| # | body | seam | pattern | reg | anchor | figuration notes | ostinato statements |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 0 | 0–124 | 12 s | `sparse-low` | −1 | opening / Polaris | 56 | 0 |
+| 1 | 136–219 | 16 s | `mid-weave` | 0 | constellation / Peg | 71 | 5 |
+| 2 | 235–377 | 22 s | `half-time-still` | −1 | constellation / Cas | 32 | 8 |
+| 3 | 399–480 | 12 s | `dense-build` | +1 | **bloom / Aldebaran** | 273 | — |
+| 4 | 492–551 | 16 s | `mid-weave` | 0 | constellation / Aur | 53 | 4 |
+| 5 | 567–660 | — | `thinning-return` | 0 | return / Polaris | 55 | 6 |
+
+Against v3's hand-composed boundaries (0 / 88 / 104 / 252 / 268 / 384 / 398 /
+556 / 572):
+
+| | engine | v3 | Δ start |
+| --- | --- | --- | --- |
+| M0 | 0–124 | 0–88 | **0 s** |
+| M1 | 136–219 | 104–252 | +32 s |
+| M2 | 235–377 | 268–384 | −33 s |
+| M3 | 399–480 | 398–556 | **+1 s** |
+| M4 | 492–551 | 572–660 | −80 s |
+| M5 | 567–660 | (v3 had five) | — |
+
+**The two structural pillars land within a second**: the opening at 0 and the
+bloom movement at 399 against v3's 398. Those are the boundaries the sky itself
+dictates — the session origin and the true climax — and the engine finds them
+independently. The middle boundaries differ because v3's were chosen by ear from
+the same score; the engine anchors them to prominences instead (Pegasus,
+Cassiopeia, Auriga), and produces six sections where the sketch drew five.
+
+Figuration density carries the contrast the sketch was reaching for: 273 notes
+in the bloom movement against 32 in the still one, an 8× swing across the piece.

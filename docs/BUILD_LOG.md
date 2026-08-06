@@ -1133,3 +1133,108 @@ Both delivered. Confidence caveat logged at Shambu's prompt: two of three
 musical hypotheses failed before one landed; gates remain the only authority.
 NEXT: his v3 ear verdict (form) + visual verdict (bar) → then A4 movement-
 planner spec from the approved sketch → then Slice B instruments + mix law.
+
+---
+
+## Living Sky — Slice A4: the Movement Planner (Form Layer) · 2026-08-06 · ✅ complete, awaiting review
+
+The night is a setlist. `src/engine/mapping/movement.ts` partitions a session
+into movements anchored to real structures — constellation prominences, the
+bloom, and the unanchored still stretches that are themselves a fact about the
+night — each with its own figuration pattern, register and density, joined by
+transition zones. The plan is computed **once in `prepareSession`** and stored on
+the `SessionPlan`, so `renderWindow` only ever reads it: partition invariance is
+now structural rather than careful, because a window derives no form at all.
+This inverts A3's doctrine as §6b instructs — **repetition at the meso scale**
+(inside a movement the rhythm mask is *identical* cycle after cycle, so a groove
+can be learned) and **non-repetition at the macro scale** (every adjacent pair of
+movements differs in pattern or register, asserted). What still breathes within a
+movement is the tone assignment, at most one slot per cycle. **Evidence:**
+`tsc --noEmit` clean, **351 tests pass** (up from 330), build succeeds, boundary
+guard green. Score exported to `docs/a4-score.json` (397 KB) by
+`test/a4ScoreExport.test.ts`, now carrying the movement plan alongside the events
+so HQ's renderer can mix each section on its own terms and the boundaries are
+auditable without re-deriving them.
+
+**The Bengaluru session** — κ 66.40×, A dorian, bloom = Aldebaran at 449 s:
+
+| # | body | seam | pattern | reg | anchor | fig. notes | ostinato |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 0 | 0–124 | 12 s | `sparse-low` | −1 | opening / Polaris | 56 | — |
+| 1 | 136–219 | 16 s | `mid-weave` | 0 | constellation / Peg | 71 | 5 |
+| 2 | 235–377 | 22 s | `half-time-still` | −1 | constellation / Cas | 32 | 8 |
+| 3 | 399–480 | 12 s | `dense-build` | +1 | **bloom / Aldebaran** | 273 | — |
+| 4 | 492–551 | 16 s | `mid-weave` | 0 | constellation / Aur | 53 | 4 |
+| 5 | 567–660 | — | `thinning-return` | 0 | return / Polaris | 55 | 6 |
+
+**Against v3's hand-composed boundaries** (0/88/104/252/268/384/398/556/572):
+M0 starts at **0 (Δ 0 s)** and the bloom movement at **399 against v3's 398
+(Δ 1 s)**. Those two are the pillars the sky itself dictates — the session origin
+and the true climax — and the engine finds them independently of the sketch. The
+middle boundaries differ by 32–80 s because v3's were placed by ear over the same
+score while the engine anchors them to prominences (Pegasus, Cassiopeia,
+Auriga), and it draws six sections where the sketch drew five. Density carries
+the contrast the sketch was reaching for: **273 figuration notes in the bloom
+movement against 32 in the still one**, an eightfold swing. The bloom's Zimmer
+stack ramps `1 1 2 2 3 3 3 3 3 3 3` into the climax and strips `2 2 1 1` after —
+octave doubling, then off-beat echo, then high sparkle, every layer a whole-octave
+transposition so the on-scale guarantee is untouched.
+
+**Four real bugs the tests caught, two of them structural:**
+
+- **The bloom got no movement of its own.** Candidates were taken in time order,
+  so Taurus claimed the boundary just before the climax and the bloom then failed
+  the minimum-length test — the additive build had nowhere to happen and
+  `bloomLayersAt` returned zero for the whole session. The climax is now placed
+  first and is mandatory; everything else fits around it.
+- **Partition invariance broke.** The off-beat echo sits half a slot after its
+  base note and was gated on the *base* note's window membership, so an echo the
+  far side of a window edge was dropped by both windows — the same shape of bug
+  the phrase grammar hit in A1b. Every layer is now filtered by its own onset.
+- **The crossfade could not reach its target count.** Every pattern in the
+  vocabulary sounds slot 0, so the outgoing and incoming passes can claim the
+  same slot and fall short; the ramp stalled and then jumped two slots. A top-up
+  pass fills from whatever remains, incoming first.
+- **Seams were too short for their own density gap.** A mask is integer-valued,
+  so it cannot move more than one slot per cycle without an audible step — five
+  slots cannot be crossed in four cycles whatever the *average* rate says. Seams
+  now run `max(12–16 s, gap × cycle)`, which makes the widest change (1 slot to 6)
+  a 22 s mix. **This deviates from the specified 12–16 s band, deliberately**: the
+  band is right for an ordinary change and arithmetically impossible for the
+  widest one, and a bigger change earning a longer mix is what a DJ would do.
+
+**A distinction worth recording, found while writing the tests:** the LEAD and
+the FIGURATION both state constellation motifs, and they do it differently. The
+lead speaks the figure melodically in its own register, from the anchor degree
+plus the contour; the figuration grooves it on the **nearest currently-sounding
+chord tone**. Both are on-scale, but only the figuration promises to double a
+live tone. My first test applied the figuration's rule to lead notes and
+correctly failed. The tests now keep them apart, and so does the LLD.
+
+**Superseded A3 tests, restated rather than deleted.** A3's "≤1 slot changes per
+cycle" assumed a continuously drifting pattern. Under A4 the guarantee inside a
+movement is *stronger* — zero rhythmic change — so the test now asserts the mask
+is identical across a movement body, that tone assignments still move at most one
+slot per cycle, that adjacent movements contrast, and that a seam ramps the note
+rate monotonically within the bound. The note-rate measure also changed to count
+active slots rather than notes emitted: a slot briefly without a tone (its star
+has set, and it waits for its own change cycle) is a fact about the sky, not a
+step in the form, and folding it in made a smooth ramp look jagged.
+
+**Territory respected:** only `src/engine/mapping`, `test/` and `docs/`. No audio
+files and no `public/samples` were touched. Committed locally; no remote exists
+and nothing has been pushed.
+
+**Not done, deliberately:** no audio-layer work — the figuration voice is still
+A3's soft synth pluck, and the movement plan carries pattern/register/density
+that Slice B's instruments and mix law will read. HQ renders the audition.
+
+**Blockers:** none.
+
+**Housekeeping note.** `test/a3ScoreExport.test.ts` is removed, superseded by the
+A4 export. It had a side effect worth naming: every full test run silently
+rewrote `docs/a3-score.json`, so the A3 artifact HQ actually rendered from was
+being overwritten with A4 output under an A3 name. That file is restored to what
+HQ rendered. The parallel stream's `public/samples/` and sample-fetch scripts
+appeared in the tree during this slice and are deliberately left untracked — they
+are not this slice's to commit.

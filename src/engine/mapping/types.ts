@@ -269,6 +269,25 @@ export interface LivingSkyConfig extends MappingConfig {
   /** Note-rate change the layer may not exceed, notes per second per second. */
   figurationMaxRateStep: number;
 
+  // ---- the FORM layer (Slice A4): movements, transitions, ostinato
+  /** Shortest and longest a movement body may run. */
+  movementMinSeconds: number;
+  movementMaxSeconds: number;
+  /** How far before its anchor a movement begins, so it arrives at the structure. */
+  movementLeadInSeconds: number;
+  /** Transition zones sit in this band, chosen deterministically per seam. */
+  transitionSecondsRange: [number, number];
+  /** How long the bloom movement is given to build before the climax. */
+  bloomBuildSeconds: number;
+  /** The movement's motif replays as the section groove every N cycles. */
+  ostinatoEveryCycles: number;
+  /** The bloom adds one Zimmer layer every N cycles, then strips in reverse. */
+  bloomLayerEveryCycles: number;
+  /** Most layers the bloom may stack. */
+  bloomMaxLayers: number;
+  /** Note-rate change per cycle the form may not exceed, notes/s. */
+  formMaxRateStep: number;
+
   /** Continuous roles are emitted on this absolute grid. */
   continuousSegmentSeconds: number;
   /** Slow modulator periods; mutually incommensurate (§11). */
