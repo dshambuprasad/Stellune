@@ -1,0 +1,1334 @@
+{
+  "generatedBy": "scripts/fetch-samples.mjs",
+  "accessDate": "2026-08-06",
+  "encode": {
+    "sampleRate": 44100,
+    "channels": 1,
+    "peakDbfs": -1,
+    "ogg": "ffmpeg -c:a libopus -b:a 64k -vbr on -application audio",
+    "mp3": "ffmpeg -c:a libmp3lame -q:a 5"
+  },
+  "packs": {
+    "vcsl": {
+      "title": "Versilian Community Sample Library (VCSL)",
+      "author": "Versilian Studios LLC (Sam Gossner)",
+      "licence": "CC0-1.0",
+      "licenceUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "homepage": "https://github.com/sgossner/VCSL",
+      "version": "commit c1ea7bcc3c7309650ab0da9d15c9cd1fbc4a4c7e (2026-01-14)"
+    },
+    "vsco2": {
+      "title": "VSCO 2 Community Edition",
+      "author": "Versilian Studios LLC (Sam Gossner) & Bigcat Instruments",
+      "licence": "CC0-1.0",
+      "licenceUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "homepage": "https://github.com/sgossner/VSCO-2-CE",
+      "version": "commit 440300901dfe9275fd84e0b7763af1f8443ae62e (2020-08-05)"
+    },
+    "salamander": {
+      "title": "Salamander Grand Piano V3",
+      "author": "Alexander Holm",
+      "licence": "CC-BY-3.0",
+      "licenceUrl": "https://creativecommons.org/licenses/by/3.0/",
+      "homepage": "https://freepats.zenvoid.org/Piano/acoustic-grand-piano.html",
+      "version": "V3+20161209, 44.1 kHz 16-bit SFZ+WAV distribution",
+      "archive": "https://freepats.zenvoid.org/Piano/SalamanderGrandPiano/SalamanderGrandPianoV3+20161209_44khz16bit.tar.xz",
+      "archiveSha256": "58750eb1366761e187f71ddb9b932355ea894d28ec4331e74ab8acb44c819936",
+      "credit": "Salamander Grand Piano V3 by Alexander Holm — CC BY 3.0"
+    },
+    "freesound": {
+      "title": "Freesound (individually-licensed CC0 sounds)",
+      "author": "per-sound, see notes",
+      "licence": "CC0-1.0",
+      "licenceUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "homepage": "https://freesound.org/",
+      "version": "high-quality public preview renditions (see per-sound sourceUrl)"
+    }
+  },
+  "instruments": {
+    "strings-violin": {
+      "title": "Violin section, sustain vibrato",
+      "pack": "vsco2",
+      "licence": "CC0-1.0",
+      "kind": "sustained",
+      "attackSeconds": 0.35,
+      "loop": {
+        "start": 1.4,
+        "end": 4.2
+      },
+      "levelDb": 5.69,
+      "medianImpactDbfs": -25.69,
+      "oggBytes": 469466,
+      "samples": [
+        {
+          "note": "G2",
+          "midi": 43,
+          "ogg": "strings-violin/G2.ogg",
+          "mp3": "strings-violin/G2.mp3",
+          "seconds": 4.5,
+          "impactDbfs": -25.69
+        },
+        {
+          "note": "A2",
+          "midi": 45,
+          "ogg": "strings-violin/A2.ogg",
+          "mp3": "strings-violin/A2.mp3",
+          "seconds": 4.5,
+          "impactDbfs": -30.46
+        },
+        {
+          "note": "B2",
+          "midi": 47,
+          "ogg": "strings-violin/B2.ogg",
+          "mp3": "strings-violin/B2.mp3",
+          "seconds": 4.5,
+          "impactDbfs": -27.1
+        },
+        {
+          "note": "D3",
+          "midi": 50,
+          "ogg": "strings-violin/D3.ogg",
+          "mp3": "strings-violin/D3.mp3",
+          "seconds": 4.5,
+          "impactDbfs": -23.34
+        },
+        {
+          "note": "F#3",
+          "midi": 54,
+          "ogg": "strings-violin/Fs3.ogg",
+          "mp3": "strings-violin/Fs3.mp3",
+          "seconds": 4.5,
+          "impactDbfs": -26.43
+        },
+        {
+          "note": "C4",
+          "midi": 60,
+          "ogg": "strings-violin/C4.ogg",
+          "mp3": "strings-violin/C4.mp3",
+          "seconds": 4.5,
+          "impactDbfs": -18.72
+        },
+        {
+          "note": "E4",
+          "midi": 64,
+          "ogg": "strings-violin/E4.ogg",
+          "mp3": "strings-violin/E4.mp3",
+          "seconds": 4.5,
+          "impactDbfs": -25.59
+        },
+        {
+          "note": "G4",
+          "midi": 67,
+          "ogg": "strings-violin/G4.ogg",
+          "mp3": "strings-violin/G4.mp3",
+          "seconds": 4.5,
+          "impactDbfs": -25.77
+        },
+        {
+          "note": "B4",
+          "midi": 71,
+          "ogg": "strings-violin/B4.ogg",
+          "mp3": "strings-violin/B4.mp3",
+          "seconds": 4.5,
+          "impactDbfs": -24.82
+        },
+        {
+          "note": "D5",
+          "midi": 74,
+          "ogg": "strings-violin/D5.ogg",
+          "mp3": "strings-violin/D5.mp3",
+          "seconds": 4.5,
+          "impactDbfs": -26.4
+        }
+      ]
+    },
+    "strings-cello": {
+      "title": "Cello section, sustain vibrato",
+      "pack": "vsco2",
+      "licence": "CC0-1.0",
+      "kind": "sustained",
+      "attackSeconds": 0.4,
+      "loop": {
+        "start": 1.4,
+        "end": 4.2
+      },
+      "levelDb": -3.44,
+      "medianImpactDbfs": -16.56,
+      "oggBytes": 504721,
+      "samples": [
+        {
+          "note": "C1",
+          "midi": 24,
+          "ogg": "strings-cello/C1.ogg",
+          "mp3": "strings-cello/C1.mp3",
+          "seconds": 4.5,
+          "impactDbfs": -28.47
+        },
+        {
+          "note": "E1",
+          "midi": 28,
+          "ogg": "strings-cello/E1.ogg",
+          "mp3": "strings-cello/E1.mp3",
+          "seconds": 4.5,
+          "impactDbfs": -17.58
+        },
+        {
+          "note": "G1",
+          "midi": 31,
+          "ogg": "strings-cello/G1.ogg",
+          "mp3": "strings-cello/G1.mp3",
+          "seconds": 4.5,
+          "impactDbfs": -16.54
+        },
+        {
+          "note": "B1",
+          "midi": 35,
+          "ogg": "strings-cello/B1.ogg",
+          "mp3": "strings-cello/B1.mp3",
+          "seconds": 4.5,
+          "impactDbfs": -15.29
+        },
+        {
+          "note": "D2",
+          "midi": 38,
+          "ogg": "strings-cello/D2.ogg",
+          "mp3": "strings-cello/D2.mp3",
+          "seconds": 4.5,
+          "impactDbfs": -22.36
+        },
+        {
+          "note": "F2",
+          "midi": 41,
+          "ogg": "strings-cello/F2.ogg",
+          "mp3": "strings-cello/F2.mp3",
+          "seconds": 4.5,
+          "impactDbfs": -19.3
+        },
+        {
+          "note": "A2",
+          "midi": 45,
+          "ogg": "strings-cello/A2.ogg",
+          "mp3": "strings-cello/A2.mp3",
+          "seconds": 4.5,
+          "impactDbfs": -14.22
+        },
+        {
+          "note": "C3",
+          "midi": 48,
+          "ogg": "strings-cello/C3.ogg",
+          "mp3": "strings-cello/C3.mp3",
+          "seconds": 4.5,
+          "impactDbfs": -15.81
+        },
+        {
+          "note": "E3",
+          "midi": 52,
+          "ogg": "strings-cello/E3.ogg",
+          "mp3": "strings-cello/E3.mp3",
+          "seconds": 4.5,
+          "impactDbfs": -15.2
+        },
+        {
+          "note": "G3",
+          "midi": 55,
+          "ogg": "strings-cello/G3.ogg",
+          "mp3": "strings-cello/G3.mp3",
+          "seconds": 4.5,
+          "impactDbfs": -18.53
+        },
+        {
+          "note": "B3",
+          "midi": 59,
+          "ogg": "strings-cello/B3.ogg",
+          "mp3": "strings-cello/B3.mp3",
+          "seconds": 4.5,
+          "impactDbfs": -16.56
+        },
+        {
+          "note": "D4",
+          "midi": 62,
+          "ogg": "strings-cello/D4.ogg",
+          "mp3": "strings-cello/D4.mp3",
+          "seconds": 4.5,
+          "impactDbfs": -19.37
+        }
+      ]
+    },
+    "contrabass": {
+      "title": "Solo contrabass, sustain vibrato — the GROUND drone",
+      "pack": "vsco2",
+      "licence": "CC0-1.0",
+      "kind": "sustained",
+      "attackSeconds": 0.5,
+      "loop": {
+        "start": 1.5,
+        "end": 4.2
+      },
+      "levelDb": -8.64,
+      "medianImpactDbfs": -11.36,
+      "oggBytes": 469849,
+      "samples": [
+        {
+          "note": "F#0",
+          "midi": 18,
+          "ogg": "contrabass/Fs0.ogg",
+          "mp3": "contrabass/Fs0.mp3",
+          "seconds": 4.5,
+          "impactDbfs": -11.25
+        },
+        {
+          "note": "G0",
+          "midi": 19,
+          "ogg": "contrabass/G0.ogg",
+          "mp3": "contrabass/G0.mp3",
+          "seconds": 4.5,
+          "impactDbfs": -12.35
+        },
+        {
+          "note": "A#0",
+          "midi": 22,
+          "ogg": "contrabass/As0.ogg",
+          "mp3": "contrabass/As0.mp3",
+          "seconds": 4.5,
+          "impactDbfs": -9.15
+        },
+        {
+          "note": "C1",
+          "midi": 24,
+          "ogg": "contrabass/C1.ogg",
+          "mp3": "contrabass/C1.mp3",
+          "seconds": 4.5,
+          "impactDbfs": -11.36
+        },
+        {
+          "note": "D1",
+          "midi": 26,
+          "ogg": "contrabass/D1.ogg",
+          "mp3": "contrabass/D1.mp3",
+          "seconds": 4.5,
+          "impactDbfs": -7.68
+        },
+        {
+          "note": "E1",
+          "midi": 28,
+          "ogg": "contrabass/E1.ogg",
+          "mp3": "contrabass/E1.mp3",
+          "seconds": 4.5,
+          "impactDbfs": -12.41
+        },
+        {
+          "note": "F#1",
+          "midi": 30,
+          "ogg": "contrabass/Fs1.ogg",
+          "mp3": "contrabass/Fs1.mp3",
+          "seconds": 4.5,
+          "impactDbfs": -14.99
+        },
+        {
+          "note": "G#1",
+          "midi": 32,
+          "ogg": "contrabass/Gs1.ogg",
+          "mp3": "contrabass/Gs1.mp3",
+          "seconds": 4.5,
+          "impactDbfs": -14.19
+        },
+        {
+          "note": "A1",
+          "midi": 33,
+          "ogg": "contrabass/A1.ogg",
+          "mp3": "contrabass/A1.mp3",
+          "seconds": 4.5,
+          "impactDbfs": -12.49
+        },
+        {
+          "note": "C#2",
+          "midi": 37,
+          "ogg": "contrabass/Cs2.ogg",
+          "mp3": "contrabass/Cs2.mp3",
+          "seconds": 4.5,
+          "impactDbfs": -11.25
+        },
+        {
+          "note": "E2",
+          "midi": 40,
+          "ogg": "contrabass/E2.ogg",
+          "mp3": "contrabass/E2.mp3",
+          "seconds": 4.5,
+          "impactDbfs": -10.71
+        },
+        {
+          "note": "G#2",
+          "midi": 44,
+          "ogg": "contrabass/Gs2.ogg",
+          "mp3": "contrabass/Gs2.mp3",
+          "seconds": 4.5,
+          "impactDbfs": -14.1
+        }
+      ]
+    },
+    "flute": {
+      "title": "Flute, sustain vibrato — airy WEATHER texture",
+      "pack": "vsco2",
+      "licence": "CC0-1.0",
+      "kind": "sustained",
+      "attackSeconds": 0.25,
+      "loop": {
+        "start": 1.2,
+        "end": 3.7
+      },
+      "levelDb": -10.14,
+      "medianImpactDbfs": -9.86,
+      "oggBytes": 429075,
+      "samples": [
+        {
+          "note": "C3",
+          "midi": 48,
+          "ogg": "flute/C3.ogg",
+          "mp3": "flute/C3.mp3",
+          "seconds": 4,
+          "impactDbfs": -13.46
+        },
+        {
+          "note": "E3",
+          "midi": 52,
+          "ogg": "flute/E3.ogg",
+          "mp3": "flute/E3.mp3",
+          "seconds": 4,
+          "impactDbfs": -12.1
+        },
+        {
+          "note": "A3",
+          "midi": 57,
+          "ogg": "flute/A3.ogg",
+          "mp3": "flute/A3.mp3",
+          "seconds": 4,
+          "impactDbfs": -11.27
+        },
+        {
+          "note": "C4",
+          "midi": 60,
+          "ogg": "flute/C4.ogg",
+          "mp3": "flute/C4.mp3",
+          "seconds": 4,
+          "impactDbfs": -11.45
+        },
+        {
+          "note": "E4",
+          "midi": 64,
+          "ogg": "flute/E4.ogg",
+          "mp3": "flute/E4.mp3",
+          "seconds": 4,
+          "impactDbfs": -9.26
+        },
+        {
+          "note": "A4",
+          "midi": 69,
+          "ogg": "flute/A4.ogg",
+          "mp3": "flute/A4.mp3",
+          "seconds": 4,
+          "impactDbfs": -8.58
+        },
+        {
+          "note": "C5",
+          "midi": 72,
+          "ogg": "flute/C5.ogg",
+          "mp3": "flute/C5.mp3",
+          "seconds": 4,
+          "impactDbfs": -9.86
+        },
+        {
+          "note": "E5",
+          "midi": 76,
+          "ogg": "flute/E5.ogg",
+          "mp3": "flute/E5.mp3",
+          "seconds": 4,
+          "impactDbfs": -9.43
+        },
+        {
+          "note": "A5",
+          "midi": 81,
+          "ogg": "flute/A5.ogg",
+          "mp3": "flute/A5.mp3",
+          "seconds": 4,
+          "impactDbfs": -14.73
+        },
+        {
+          "note": "C6",
+          "midi": 84,
+          "ogg": "flute/C6.ogg",
+          "mp3": "flute/C6.mp3",
+          "seconds": 4,
+          "impactDbfs": -7.05
+        }
+      ]
+    },
+    "wine-glass": {
+      "title": "Wine glasses, bowed rim — glass WEATHER / LEAD",
+      "pack": "vcsl",
+      "licence": "CC0-1.0",
+      "kind": "sustained",
+      "attackSeconds": 0.6,
+      "loop": {
+        "start": 1.5,
+        "end": 3.8
+      },
+      "levelDb": -12.14,
+      "medianImpactDbfs": -7.86,
+      "oggBytes": 165878,
+      "samples": [
+        {
+          "note": "D#4",
+          "midi": 63,
+          "ogg": "wine-glass/Ds4.ogg",
+          "mp3": "wine-glass/Ds4.mp3",
+          "seconds": 4,
+          "impactDbfs": -14.33
+        },
+        {
+          "note": "F#4",
+          "midi": 66,
+          "ogg": "wine-glass/Fs4.ogg",
+          "mp3": "wine-glass/Fs4.mp3",
+          "seconds": 4,
+          "impactDbfs": -7.26
+        },
+        {
+          "note": "A#4",
+          "midi": 70,
+          "ogg": "wine-glass/As4.ogg",
+          "mp3": "wine-glass/As4.mp3",
+          "seconds": 4,
+          "impactDbfs": -7.86
+        },
+        {
+          "note": "D5",
+          "midi": 74,
+          "ogg": "wine-glass/D5.ogg",
+          "mp3": "wine-glass/D5.mp3",
+          "seconds": 4,
+          "impactDbfs": -11.92
+        }
+      ]
+    },
+    "vibraphone-bowed": {
+      "title": "Vibraphone, bowed — glassy sustained glow",
+      "pack": "vcsl",
+      "licence": "CC0-1.0",
+      "kind": "sustained",
+      "attackSeconds": 0.5,
+      "loop": {
+        "start": 1.5,
+        "end": 3.8
+      },
+      "levelDb": -6.54,
+      "medianImpactDbfs": -13.46,
+      "oggBytes": 273146,
+      "samples": [
+        {
+          "note": "A2",
+          "midi": 45,
+          "ogg": "vibraphone-bowed/A2.ogg",
+          "mp3": "vibraphone-bowed/A2.mp3",
+          "seconds": 4,
+          "impactDbfs": -9.06
+        },
+        {
+          "note": "E3",
+          "midi": 52,
+          "ogg": "vibraphone-bowed/E3.ogg",
+          "mp3": "vibraphone-bowed/E3.mp3",
+          "seconds": 4,
+          "impactDbfs": -12.29
+        },
+        {
+          "note": "G3",
+          "midi": 55,
+          "ogg": "vibraphone-bowed/G3.ogg",
+          "mp3": "vibraphone-bowed/G3.mp3",
+          "seconds": 4,
+          "impactDbfs": -13.46
+        },
+        {
+          "note": "D4",
+          "midi": 62,
+          "ogg": "vibraphone-bowed/D4.ogg",
+          "mp3": "vibraphone-bowed/D4.mp3",
+          "seconds": 4,
+          "impactDbfs": -15.59
+        },
+        {
+          "note": "A4",
+          "midi": 69,
+          "ogg": "vibraphone-bowed/A4.ogg",
+          "mp3": "vibraphone-bowed/A4.mp3",
+          "seconds": 4,
+          "impactDbfs": -13.6
+        },
+        {
+          "note": "E5",
+          "midi": 76,
+          "ogg": "vibraphone-bowed/E5.ogg",
+          "mp3": "vibraphone-bowed/E5.mp3",
+          "seconds": 4,
+          "impactDbfs": -13.69
+        }
+      ]
+    },
+    "kalimba": {
+      "title": "Kalimba (mbira), Kenya — FIGURATION",
+      "pack": "vcsl",
+      "licence": "CC0-1.0",
+      "kind": "decay",
+      "attackSeconds": 0.004,
+      "loop": null,
+      "levelDb": -1.31,
+      "medianImpactDbfs": -18.69,
+      "oggBytes": 188580,
+      "samples": [
+        {
+          "note": "B2",
+          "midi": 47,
+          "ogg": "kalimba/B2.ogg",
+          "mp3": "kalimba/B2.mp3",
+          "seconds": 2.6,
+          "impactDbfs": -21.63
+        },
+        {
+          "note": "C#3",
+          "midi": 49,
+          "ogg": "kalimba/Cs3.ogg",
+          "mp3": "kalimba/Cs3.mp3",
+          "seconds": 2.6,
+          "impactDbfs": -17.61
+        },
+        {
+          "note": "D#3",
+          "midi": 51,
+          "ogg": "kalimba/Ds3.ogg",
+          "mp3": "kalimba/Ds3.mp3",
+          "seconds": 2.6,
+          "impactDbfs": -18.69
+        },
+        {
+          "note": "F#3",
+          "midi": 54,
+          "ogg": "kalimba/Fs3.ogg",
+          "mp3": "kalimba/Fs3.mp3",
+          "seconds": 2.6,
+          "impactDbfs": -16.95
+        },
+        {
+          "note": "G#3",
+          "midi": 56,
+          "ogg": "kalimba/Gs3.ogg",
+          "mp3": "kalimba/Gs3.mp3",
+          "seconds": 2.6,
+          "impactDbfs": -18.73
+        },
+        {
+          "note": "B3",
+          "midi": 59,
+          "ogg": "kalimba/B3.ogg",
+          "mp3": "kalimba/B3.mp3",
+          "seconds": 2.6,
+          "impactDbfs": -16.91
+        },
+        {
+          "note": "C#4",
+          "midi": 61,
+          "ogg": "kalimba/Cs4.ogg",
+          "mp3": "kalimba/Cs4.mp3",
+          "seconds": 2.6,
+          "impactDbfs": -14.87
+        },
+        {
+          "note": "D#4",
+          "midi": 63,
+          "ogg": "kalimba/Ds4.ogg",
+          "mp3": "kalimba/Ds4.mp3",
+          "seconds": 2.6,
+          "impactDbfs": -20.8
+        },
+        {
+          "note": "F#4",
+          "midi": 66,
+          "ogg": "kalimba/Fs4.ogg",
+          "mp3": "kalimba/Fs4.mp3",
+          "seconds": 2.6,
+          "impactDbfs": -17.26
+        },
+        {
+          "note": "A4",
+          "midi": 69,
+          "ogg": "kalimba/A4.ogg",
+          "mp3": "kalimba/A4.mp3",
+          "seconds": 2.6,
+          "impactDbfs": -20.65
+        },
+        {
+          "note": "B4",
+          "midi": 71,
+          "ogg": "kalimba/B4.ogg",
+          "mp3": "kalimba/B4.mp3",
+          "seconds": 2.6,
+          "impactDbfs": -25.47
+        }
+      ]
+    },
+    "handpan": {
+      "title": "Handpan / steel tongue drum — FIGURATION (Ground lens)",
+      "pack": "freesound",
+      "licence": "CC0-1.0",
+      "kind": "decay",
+      "attackSeconds": 0.003,
+      "loop": null,
+      "levelDb": -12.03,
+      "medianImpactDbfs": -7.97,
+      "oggBytes": 61361,
+      "samples": [
+        {
+          "note": "C#3",
+          "midi": 49,
+          "ogg": "handpan/Cs3.ogg",
+          "mp3": "handpan/Cs3.mp3",
+          "seconds": 4,
+          "impactDbfs": -12.35,
+          "measuredHz": 138.8
+        },
+        {
+          "note": "F4",
+          "midi": 65,
+          "ogg": "handpan/F4.ogg",
+          "mp3": "handpan/F4.mp3",
+          "seconds": 4,
+          "impactDbfs": -7.97,
+          "measuredHz": 350.76
+        }
+      ]
+    },
+    "slit-drum": {
+      "title": "Slit (log) drum — handpan-class FIGURATION, low register",
+      "pack": "vcsl",
+      "licence": "CC0-1.0",
+      "kind": "decay",
+      "attackSeconds": 0.003,
+      "loop": null,
+      "levelDb": -4.27,
+      "medianImpactDbfs": -15.73,
+      "oggBytes": 20317,
+      "samples": [
+        {
+          "note": "A2",
+          "midi": 45,
+          "ogg": "slit-drum/A2.ogg",
+          "mp3": "slit-drum/A2.mp3",
+          "seconds": 1.126,
+          "impactDbfs": -18.43,
+          "measuredHz": 107.3
+        },
+        {
+          "note": "D#3",
+          "midi": 51,
+          "ogg": "slit-drum/Ds3.ogg",
+          "mp3": "slit-drum/Ds3.mp3",
+          "seconds": 1.488,
+          "impactDbfs": -15.73,
+          "measuredHz": 155.83
+        }
+      ]
+    },
+    "hand-bells": {
+      "title": "Nepalese hand bells — bright bell LEAD (bell/bowl family)",
+      "pack": "vcsl",
+      "licence": "CC0-1.0",
+      "kind": "decay",
+      "attackSeconds": 0.005,
+      "loop": null,
+      "levelDb": -0.69,
+      "medianImpactDbfs": -19.31,
+      "oggBytes": 75662,
+      "samples": [
+        {
+          "note": "A#5",
+          "midi": 82,
+          "ogg": "hand-bells/As5.ogg",
+          "mp3": "hand-bells/As5.mp3",
+          "seconds": 1.269,
+          "impactDbfs": -22.67,
+          "measuredHz": 943.16
+        },
+        {
+          "note": "C#6",
+          "midi": 85,
+          "ogg": "hand-bells/Cs6.ogg",
+          "mp3": "hand-bells/Cs6.mp3",
+          "seconds": 2.998,
+          "impactDbfs": -19.31,
+          "measuredHz": 1092.83
+        },
+        {
+          "note": "B6",
+          "midi": 95,
+          "ogg": "hand-bells/B6.ogg",
+          "mp3": "hand-bells/B6.mp3",
+          "seconds": 2.243,
+          "impactDbfs": -13.96,
+          "measuredHz": 1952.84
+        }
+      ]
+    },
+    "hand-chimes": {
+      "title": "Hand chimes — bell LEAD, long sustain",
+      "pack": "vcsl",
+      "licence": "CC0-1.0",
+      "kind": "decay",
+      "attackSeconds": 0.006,
+      "loop": null,
+      "levelDb": -11.09,
+      "medianImpactDbfs": -8.91,
+      "oggBytes": 390008,
+      "samples": [
+        {
+          "note": "C3",
+          "midi": 48,
+          "ogg": "hand-chimes/C3.ogg",
+          "mp3": "hand-chimes/C3.mp3",
+          "seconds": 3.6,
+          "impactDbfs": -8.91
+        },
+        {
+          "note": "D#3",
+          "midi": 51,
+          "ogg": "hand-chimes/Ds3.ogg",
+          "mp3": "hand-chimes/Ds3.mp3",
+          "seconds": 3.6,
+          "impactDbfs": -5.9
+        },
+        {
+          "note": "F#3",
+          "midi": 54,
+          "ogg": "hand-chimes/Fs3.ogg",
+          "mp3": "hand-chimes/Fs3.mp3",
+          "seconds": 3.6,
+          "impactDbfs": -11.65
+        },
+        {
+          "note": "A#3",
+          "midi": 58,
+          "ogg": "hand-chimes/As3.ogg",
+          "mp3": "hand-chimes/As3.mp3",
+          "seconds": 3.6,
+          "impactDbfs": -6.45
+        },
+        {
+          "note": "C4",
+          "midi": 60,
+          "ogg": "hand-chimes/C4.ogg",
+          "mp3": "hand-chimes/C4.mp3",
+          "seconds": 3.6,
+          "impactDbfs": -5.57
+        },
+        {
+          "note": "F#4",
+          "midi": 66,
+          "ogg": "hand-chimes/Fs4.ogg",
+          "mp3": "hand-chimes/Fs4.mp3",
+          "seconds": 3.6,
+          "impactDbfs": -5.94
+        },
+        {
+          "note": "G#4",
+          "midi": 68,
+          "ogg": "hand-chimes/Gs4.ogg",
+          "mp3": "hand-chimes/Gs4.mp3",
+          "seconds": 3.6,
+          "impactDbfs": -10.85
+        },
+        {
+          "note": "C5",
+          "midi": 72,
+          "ogg": "hand-chimes/C5.ogg",
+          "mp3": "hand-chimes/C5.mp3",
+          "seconds": 3.6,
+          "impactDbfs": -10.53
+        },
+        {
+          "note": "F#5",
+          "midi": 78,
+          "ogg": "hand-chimes/Fs5.ogg",
+          "mp3": "hand-chimes/Fs5.mp3",
+          "seconds": 3.6,
+          "impactDbfs": -10.38
+        },
+        {
+          "note": "C6",
+          "midi": 84,
+          "ogg": "hand-chimes/C6.ogg",
+          "mp3": "hand-chimes/C6.mp3",
+          "seconds": 3.6,
+          "impactDbfs": -14.55
+        }
+      ]
+    },
+    "glockenspiel": {
+      "title": "Glockenspiel, soft mallets — bright LEAD",
+      "pack": "vcsl",
+      "licence": "CC0-1.0",
+      "kind": "decay",
+      "attackSeconds": 0.003,
+      "loop": null,
+      "levelDb": -5.68,
+      "medianImpactDbfs": -14.32,
+      "oggBytes": 180775,
+      "samples": [
+        {
+          "note": "G4",
+          "midi": 67,
+          "ogg": "glockenspiel/G4.ogg",
+          "mp3": "glockenspiel/G4.mp3",
+          "seconds": 3,
+          "impactDbfs": -15.02
+        },
+        {
+          "note": "C5",
+          "midi": 72,
+          "ogg": "glockenspiel/C5.ogg",
+          "mp3": "glockenspiel/C5.mp3",
+          "seconds": 3,
+          "impactDbfs": -9.19
+        },
+        {
+          "note": "G5",
+          "midi": 79,
+          "ogg": "glockenspiel/G5.ogg",
+          "mp3": "glockenspiel/G5.mp3",
+          "seconds": 3,
+          "impactDbfs": -15.67
+        },
+        {
+          "note": "C6",
+          "midi": 84,
+          "ogg": "glockenspiel/C6.ogg",
+          "mp3": "glockenspiel/C6.mp3",
+          "seconds": 3,
+          "impactDbfs": -15.44
+        },
+        {
+          "note": "G6",
+          "midi": 91,
+          "ogg": "glockenspiel/G6.ogg",
+          "mp3": "glockenspiel/G6.mp3",
+          "seconds": 3,
+          "impactDbfs": -13.92
+        },
+        {
+          "note": "C7",
+          "midi": 96,
+          "ogg": "glockenspiel/C7.ogg",
+          "mp3": "glockenspiel/C7.mp3",
+          "seconds": 3,
+          "impactDbfs": -14.32
+        }
+      ]
+    },
+    "vibraphone-soft": {
+      "title": "Vibraphone, soft mallets — warm glow (Embrace)",
+      "pack": "vcsl",
+      "licence": "CC0-1.0",
+      "kind": "decay",
+      "attackSeconds": 0.004,
+      "loop": null,
+      "levelDb": -13.49,
+      "medianImpactDbfs": -6.51,
+      "oggBytes": 321551,
+      "samples": [
+        {
+          "note": "F2",
+          "midi": 41,
+          "ogg": "vibraphone-soft/F2.ogg",
+          "mp3": "vibraphone-soft/F2.mp3",
+          "seconds": 3.5,
+          "impactDbfs": -12.1
+        },
+        {
+          "note": "A2",
+          "midi": 45,
+          "ogg": "vibraphone-soft/A2.ogg",
+          "mp3": "vibraphone-soft/A2.mp3",
+          "seconds": 3.5,
+          "impactDbfs": -9.64
+        },
+        {
+          "note": "C3",
+          "midi": 48,
+          "ogg": "vibraphone-soft/C3.ogg",
+          "mp3": "vibraphone-soft/C3.mp3",
+          "seconds": 3.5,
+          "impactDbfs": -5.06
+        },
+        {
+          "note": "E3",
+          "midi": 52,
+          "ogg": "vibraphone-soft/E3.ogg",
+          "mp3": "vibraphone-soft/E3.mp3",
+          "seconds": 3.5,
+          "impactDbfs": -5.89
+        },
+        {
+          "note": "G3",
+          "midi": 55,
+          "ogg": "vibraphone-soft/G3.ogg",
+          "mp3": "vibraphone-soft/G3.mp3",
+          "seconds": 3.5,
+          "impactDbfs": -6.64
+        },
+        {
+          "note": "B3",
+          "midi": 59,
+          "ogg": "vibraphone-soft/B3.ogg",
+          "mp3": "vibraphone-soft/B3.mp3",
+          "seconds": 3.5,
+          "impactDbfs": -5
+        },
+        {
+          "note": "D4",
+          "midi": 62,
+          "ogg": "vibraphone-soft/D4.ogg",
+          "mp3": "vibraphone-soft/D4.mp3",
+          "seconds": 3.5,
+          "impactDbfs": -5.94
+        },
+        {
+          "note": "F4",
+          "midi": 65,
+          "ogg": "vibraphone-soft/F4.ogg",
+          "mp3": "vibraphone-soft/F4.mp3",
+          "seconds": 3.5,
+          "impactDbfs": -6.63
+        },
+        {
+          "note": "A4",
+          "midi": 69,
+          "ogg": "vibraphone-soft/A4.ogg",
+          "mp3": "vibraphone-soft/A4.mp3",
+          "seconds": 3.5,
+          "impactDbfs": -5.83
+        },
+        {
+          "note": "C5",
+          "midi": 72,
+          "ogg": "vibraphone-soft/C5.ogg",
+          "mp3": "vibraphone-soft/C5.mp3",
+          "seconds": 3.5,
+          "impactDbfs": -6.51
+        },
+        {
+          "note": "E5",
+          "midi": 76,
+          "ogg": "vibraphone-soft/E5.ogg",
+          "mp3": "vibraphone-soft/E5.mp3",
+          "seconds": 3.5,
+          "impactDbfs": -6.52
+        }
+      ]
+    },
+    "piano-felt": {
+      "title": "Salamander Grand Piano V3, soft velocity layer — felt-piano LEAD",
+      "pack": "salamander",
+      "licence": "CC-BY-3.0",
+      "kind": "decay",
+      "attackSeconds": 0.004,
+      "loop": null,
+      "levelDb": -8.85,
+      "medianImpactDbfs": -11.15,
+      "oggBytes": 568957,
+      "samples": [
+        {
+          "note": "A1",
+          "midi": 33,
+          "ogg": "piano-felt/A1.ogg",
+          "mp3": "piano-felt/A1.mp3",
+          "seconds": 3.6,
+          "impactDbfs": -11.05
+        },
+        {
+          "note": "C2",
+          "midi": 36,
+          "ogg": "piano-felt/C2.ogg",
+          "mp3": "piano-felt/C2.mp3",
+          "seconds": 3.6,
+          "impactDbfs": -9.74
+        },
+        {
+          "note": "D#2",
+          "midi": 39,
+          "ogg": "piano-felt/Ds2.ogg",
+          "mp3": "piano-felt/Ds2.mp3",
+          "seconds": 3.6,
+          "impactDbfs": -10.42
+        },
+        {
+          "note": "F#2",
+          "midi": 42,
+          "ogg": "piano-felt/Fs2.ogg",
+          "mp3": "piano-felt/Fs2.mp3",
+          "seconds": 3.6,
+          "impactDbfs": -8.86
+        },
+        {
+          "note": "A2",
+          "midi": 45,
+          "ogg": "piano-felt/A2.ogg",
+          "mp3": "piano-felt/A2.mp3",
+          "seconds": 3.6,
+          "impactDbfs": -11.29
+        },
+        {
+          "note": "C3",
+          "midi": 48,
+          "ogg": "piano-felt/C3.ogg",
+          "mp3": "piano-felt/C3.mp3",
+          "seconds": 3.6,
+          "impactDbfs": -10.77
+        },
+        {
+          "note": "D#3",
+          "midi": 51,
+          "ogg": "piano-felt/Ds3.ogg",
+          "mp3": "piano-felt/Ds3.mp3",
+          "seconds": 3.6,
+          "impactDbfs": -10.61
+        },
+        {
+          "note": "F#3",
+          "midi": 54,
+          "ogg": "piano-felt/Fs3.ogg",
+          "mp3": "piano-felt/Fs3.mp3",
+          "seconds": 3.6,
+          "impactDbfs": -12.92
+        },
+        {
+          "note": "A3",
+          "midi": 57,
+          "ogg": "piano-felt/A3.ogg",
+          "mp3": "piano-felt/A3.mp3",
+          "seconds": 3.6,
+          "impactDbfs": -14.71
+        },
+        {
+          "note": "C4",
+          "midi": 60,
+          "ogg": "piano-felt/C4.ogg",
+          "mp3": "piano-felt/C4.mp3",
+          "seconds": 3.6,
+          "impactDbfs": -10.83
+        },
+        {
+          "note": "D#4",
+          "midi": 63,
+          "ogg": "piano-felt/Ds4.ogg",
+          "mp3": "piano-felt/Ds4.mp3",
+          "seconds": 3.6,
+          "impactDbfs": -14.49
+        },
+        {
+          "note": "F#4",
+          "midi": 66,
+          "ogg": "piano-felt/Fs4.ogg",
+          "mp3": "piano-felt/Fs4.mp3",
+          "seconds": 3.6,
+          "impactDbfs": -11.15
+        },
+        {
+          "note": "A4",
+          "midi": 69,
+          "ogg": "piano-felt/A4.ogg",
+          "mp3": "piano-felt/A4.mp3",
+          "seconds": 3.6,
+          "impactDbfs": -11.83
+        },
+        {
+          "note": "C5",
+          "midi": 72,
+          "ogg": "piano-felt/C5.ogg",
+          "mp3": "piano-felt/C5.mp3",
+          "seconds": 3.6,
+          "impactDbfs": -11.47
+        },
+        {
+          "note": "D#5",
+          "midi": 75,
+          "ogg": "piano-felt/Ds5.ogg",
+          "mp3": "piano-felt/Ds5.mp3",
+          "seconds": 3.6,
+          "impactDbfs": -11.06
+        },
+        {
+          "note": "F#5",
+          "midi": 78,
+          "ogg": "piano-felt/Fs5.ogg",
+          "mp3": "piano-felt/Fs5.mp3",
+          "seconds": 3.6,
+          "impactDbfs": -11.69
+        },
+        {
+          "note": "A5",
+          "midi": 81,
+          "ogg": "piano-felt/A5.ogg",
+          "mp3": "piano-felt/A5.mp3",
+          "seconds": 3.6,
+          "impactDbfs": -12.42
+        },
+        {
+          "note": "C6",
+          "midi": 84,
+          "ogg": "piano-felt/C6.ogg",
+          "mp3": "piano-felt/C6.mp3",
+          "seconds": 3.6,
+          "impactDbfs": -16.82
+        }
+      ]
+    },
+    "fm-piano": {
+      "title": "Yamaha TX81Z FM piano — the electronic lens (Pulse)",
+      "pack": "vcsl",
+      "licence": "CC0-1.0",
+      "kind": "decay",
+      "attackSeconds": 0.004,
+      "loop": null,
+      "levelDb": -8.98,
+      "medianImpactDbfs": -11.02,
+      "oggBytes": 539941,
+      "samples": [
+        {
+          "note": "C1",
+          "midi": 24,
+          "ogg": "fm-piano/C1.ogg",
+          "mp3": "fm-piano/C1.mp3",
+          "seconds": 3.5,
+          "impactDbfs": -12.32
+        },
+        {
+          "note": "E1",
+          "midi": 28,
+          "ogg": "fm-piano/E1.ogg",
+          "mp3": "fm-piano/E1.mp3",
+          "seconds": 3.5,
+          "impactDbfs": -11.82
+        },
+        {
+          "note": "G#1",
+          "midi": 32,
+          "ogg": "fm-piano/Gs1.ogg",
+          "mp3": "fm-piano/Gs1.mp3",
+          "seconds": 3.5,
+          "impactDbfs": -11.91
+        },
+        {
+          "note": "C2",
+          "midi": 36,
+          "ogg": "fm-piano/C2.ogg",
+          "mp3": "fm-piano/C2.mp3",
+          "seconds": 3.5,
+          "impactDbfs": -11.41
+        },
+        {
+          "note": "E2",
+          "midi": 40,
+          "ogg": "fm-piano/E2.ogg",
+          "mp3": "fm-piano/E2.mp3",
+          "seconds": 3.5,
+          "impactDbfs": -11.16
+        },
+        {
+          "note": "G#2",
+          "midi": 44,
+          "ogg": "fm-piano/Gs2.ogg",
+          "mp3": "fm-piano/Gs2.mp3",
+          "seconds": 3.5,
+          "impactDbfs": -10.91
+        },
+        {
+          "note": "C3",
+          "midi": 48,
+          "ogg": "fm-piano/C3.ogg",
+          "mp3": "fm-piano/C3.mp3",
+          "seconds": 3.5,
+          "impactDbfs": -10.44
+        },
+        {
+          "note": "E3",
+          "midi": 52,
+          "ogg": "fm-piano/E3.ogg",
+          "mp3": "fm-piano/E3.mp3",
+          "seconds": 3.5,
+          "impactDbfs": -10.57
+        },
+        {
+          "note": "G#3",
+          "midi": 56,
+          "ogg": "fm-piano/Gs3.ogg",
+          "mp3": "fm-piano/Gs3.mp3",
+          "seconds": 3.5,
+          "impactDbfs": -10.76
+        },
+        {
+          "note": "C4",
+          "midi": 60,
+          "ogg": "fm-piano/C4.ogg",
+          "mp3": "fm-piano/C4.mp3",
+          "seconds": 3.5,
+          "impactDbfs": -10.52
+        },
+        {
+          "note": "E4",
+          "midi": 64,
+          "ogg": "fm-piano/E4.ogg",
+          "mp3": "fm-piano/E4.mp3",
+          "seconds": 3.5,
+          "impactDbfs": -10.74
+        },
+        {
+          "note": "G#4",
+          "midi": 68,
+          "ogg": "fm-piano/Gs4.ogg",
+          "mp3": "fm-piano/Gs4.mp3",
+          "seconds": 3.5,
+          "impactDbfs": -10.97
+        },
+        {
+          "note": "C5",
+          "midi": 72,
+          "ogg": "fm-piano/C5.ogg",
+          "mp3": "fm-piano/C5.mp3",
+          "seconds": 3.5,
+          "impactDbfs": -11.02
+        },
+        {
+          "note": "E5",
+          "midi": 76,
+          "ogg": "fm-piano/E5.ogg",
+          "mp3": "fm-piano/E5.mp3",
+          "seconds": 3.5,
+          "impactDbfs": -11.2
+        },
+        {
+          "note": "G#5",
+          "midi": 80,
+          "ogg": "fm-piano/Gs5.ogg",
+          "mp3": "fm-piano/Gs5.mp3",
+          "seconds": 3.5,
+          "impactDbfs": -11.78
+        },
+        {
+          "note": "C6",
+          "midi": 84,
+          "ogg": "fm-piano/C6.ogg",
+          "mp3": "fm-piano/C6.mp3",
+          "seconds": 3.5,
+          "impactDbfs": -11.7
+        }
+      ]
+    }
+  }
+}

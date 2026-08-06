@@ -20,6 +20,11 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "build:data": "node scripts/build-data.mjs",
+    "samples:fetch": "node scripts/fetch-samples.mjs",
+    "samples:report": "node scripts/fetch-samples.mjs --report",
+    "render": "node scripts/render-score.mjs",
+    "audition": "node scripts/render-audition.mjs",
+    "check:mix-law": "node scripts/check-mix-law.mjs",
     "test": "vitest run"
   },
   "devDependencies": {

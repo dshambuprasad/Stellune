@@ -26,3 +26,8 @@ dist-ssr
 # Raw catalogue downloads — the prep script (Phase 1) regenerates the bundled
 # subset in public/data/ from these; the multi-MB originals stay out of git.
 scripts/.cache/
+
+# Slice B0 — intermediate renders. The renderer prints a WAV and then encodes
+# the committed mp3 from it; the WAV is 10 MB a minute and reproducible with
+# `npm run audition`, so only the mp3 goes in.
+docs/b0-*.wav

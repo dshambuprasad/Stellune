@@ -1,0 +1,49 @@
+{
+  "lens": "aurora",
+  "section": "birth",
+  "from": 360,
+  "seconds": 60,
+  "calibratedFrom": 90,
+  "calibrateSeconds": 510,
+  "targets": {
+    "figuration": -19,
+    "lead": -21,
+    "ground": -23,
+    "chord": -25,
+    "weather": -34
+  },
+  "steadyStateMeasured": {
+    "ground": -22.999999999825043,
+    "chord": -25.000000000003084,
+    "figuration": -19.000000000060183,
+    "lead": -21.00000000028016,
+    "weather": -34.000000000148
+  },
+  "clipMeasured": {
+    "ground": -22.707881422171276,
+    "chord": -23.652627771772128,
+    "figuration": -18.721381836376846,
+    "lead": -21.153653895186228,
+    "weather": -33.22822957515378
+  },
+  "trims": {
+    "ground": 0.6057926140938932,
+    "chord": -4.136255051295599,
+    "figuration": 11.744754857451305,
+    "lead": 12.652534545336223,
+    "weather": -7.887248021784927
+  },
+  "concurrency": {
+    "ground": 1,
+    "chord": 29,
+    "figuration": 3,
+    "lead": 4,
+    "weather": 1
+  },
+  "rawPeakDbfs": 1.4678115784509864,
+  "masterTrimDb": -11.817,
+  "limitedDb": 0,
+  "limiterBusyFraction": 0,
+  "masterPeakDbfs": -10.349188281468178,
+  "substitutions": {}
+}

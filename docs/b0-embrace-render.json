@@ -1,0 +1,51 @@
+{
+  "lens": "embrace",
+  "section": "birth",
+  "from": 360,
+  "seconds": 60,
+  "calibratedFrom": 90,
+  "calibrateSeconds": 510,
+  "targets": {
+    "figuration": -19,
+    "lead": -21,
+    "ground": -23,
+    "chord": -25,
+    "weather": -34
+  },
+  "steadyStateMeasured": {
+    "ground": -22.999999999825043,
+    "chord": -25.00000000005206,
+    "figuration": -18.99999999995529,
+    "lead": -20.999999999434394,
+    "weather": -34.000000000103284
+  },
+  "clipMeasured": {
+    "ground": -22.707881422171276,
+    "chord": -23.38218337281008,
+    "figuration": -18.814562095786794,
+    "lead": -20.876288062066326,
+    "weather": -33.21658605713218
+  },
+  "trims": {
+    "ground": 0.6057926140938932,
+    "chord": -3.6825109964332228,
+    "figuration": 11.214837578556892,
+    "lead": 21.548442660141852,
+    "weather": -7.111350444911412
+  },
+  "concurrency": {
+    "ground": 1,
+    "chord": 29,
+    "figuration": 3,
+    "lead": 4,
+    "weather": 1
+  },
+  "rawPeakDbfs": 3.892543655315071,
+  "masterTrimDb": -11.817,
+  "limitedDb": 0,
+  "limiterBusyFraction": 0,
+  "masterPeakDbfs": -7.92445651830718,
+  "substitutions": {
+    "chord:strings-violin": 25
+  }
+}

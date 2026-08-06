@@ -1238,3 +1238,69 @@ being overwritten with A4 output under an A3 name. That file is restored to what
 HQ rendered. The parallel stream's `public/samples/` and sample-fetch scripts
 appeared in the tree during this slice and are deliberately left untracked — they
 are not this slice's to commit.
+
+**◆ SLICE B0 — SAMPLED INSTRUMENTS + THE FAST RENDERER — 2026-08-07.** The
+30-minute browser bake is dead: `scripts/render-score.mjs` reads
+`docs/a3-score.json` and the bundled samples and prints a finished stereo WAV in
+Node — no browser, no Web Audio, no Tone — at **15–19× real time** (a 60 s
+audition in ~4 s; the whole 510 s steady state in ~25 s). It seeds Phase 5's
+share export. **SOURCING, all verified from the authoritative source before
+anything was bundled** (`docs/ATTRIBUTION_AUDIO.md`: 133 notes, every one with
+source URL, pinned version, licence, SHA-256, access date 2026-08-06): VCSL and
+VSCO 2 CE, both CC0, pinned to commit SHAs with their in-repo `LICENSE` read;
+Salamander Grand Piano V3 — **and here the sources disagree**, the author's own
+page declaring it public domain as of 2022-03-04 while the FreePats distribution
+we actually downloaded still says CC BY 3.0, so we take the stricter and carry
+the credit line; two individually-verified CC0 Freesound sounds for the handpan.
+Freesound's API needs a token and its originals need an account, so those two are
+public preview renditions and the only lossy-sourced material in the bundle —
+stated plainly rather than papered over. **Singing bowls are a genuine gap**: no
+CC0 set with a usable note map was found, so the bowl slot is filled by Nepalese
+hand bells and hand chimes and *named as such* instead of mislabelled. Pitch is
+measured, not assumed — seven sources are unnamed or misnamed, including a
+Freesound upload titled "F3" whose strike measures **F4** with no energy at all
+at 175 Hz. Encoded mono 44.1 kHz, Opus 64k (`.ogg`) + LAME V5 (`.mp3`); the ogg
+slot is **Opus, not Vorbis**, because the pinned ffmpeg has no libvorbis, and the
+runtime asks the browser which it can play. Per-lens payload **1.30–2.33 MB
+primary, 2.14–2.97 MB full chain**, all inside the ≤3 MB target; 4.44 MB for all
+five. **THE LENS CONFIG** lives in `public/samples/lenses.json` — data, not code,
+because the live app and the Node renderer must make identical instrument
+choices and only one shared file keeps them honest; `samplerLenses.ts` types and
+validates it, `samplerBank.ts` does lazy per-lens `Tone.Sampler` loading
+(primary tier first, fall-throughs in the background). **Infra only — nothing is
+wired into the running app, and `engine/audio/index.ts` is deliberately
+untouched; that is B1's, and it is the parallel stream's file.** **THE MIX LAW is
+implemented and asserted**: stems are measured over the steady state (the section
+minus its opening bloom and closing return) and trimmed to the ratified targets,
+and `npm run check:mix-law` **PASSES on all five lenses** — figuration −19.0,
+lead −21.0, ground −23.0, chord −25.0, weather −34.0 dBFS, every lens, exactly.
+**The checker earned its keep by failing three times on real defects**: (1)
+concurrency was normalised by the section's *maximum* voice count, so the chord
+bed ran 6 dB hot as the sky filled — now normalised against the *instantaneous*
+count, slewed; (2) peak-normalised samples still spanned a **19 dB** loudness
+range, so a role falling through from one instrument to another lurched — each
+instrument now carries a measured `levelDb`; (3) the TX81Z Clavisynth, bundled as
+the Pulse pad, **decays 50 dB in three seconds** — looping it to hold a chord
+loops silence. It is dropped, Pulse's sustained roles moved to bowed vibraphone,
+and `fetch-samples.mjs` now refuses any `sustained` instrument whose loop region
+sits >12 dB under its attack. **Two things for Shambu's judgement, measured and
+reported rather than quietly resolved:** the law's prose says figuration sits
+"3–5 dB ABOVE the combined bed", but read as a power sum its own numbers give
+**1.9 dB** (−23 and −25 sum to −20.9; −19 is 1.9 over) — the absolute stem
+numbers are asserted exactly and the combined-bed margin is reported, because
+tightening it means re-ratifying the targets, which is not the tool's call. And
+**the A3 score still voices ground and weather both on midi 45** — the 2026-08-07
+defect, live in the artifact; the renderer lifts weather an octave and the
+checker asserts the separation, but the engine-side fix (a register hint on
+weather events) is the mapping stream's. **EVIDENCE, committed:** five 60-second
+clips, `docs/b0-{aurora,embrace,sonata,pulse,ground}-60s.mp3`, all printed from
+the same window — t=360–420 s, the densest minute of the birth session (82
+figuration onsets, 7 lead phrases, 30 chord voices, all five roles present) —
+through one **shared** master fader of −11.8 dB, so the five can be A/B'd
+honestly: per-clip peak normalisation would have printed them 9 dB apart, which
+is crest factor talking, not music. They are quiet on purpose; turn it up. Plus
+`docs/b0-mix-law.json` (measured stems, the per-window arc, headroom) and
+`docs/b0-*-render.json`. Lens invariance holds — all five play the same notes at
+the same times. 351 existing tests pass, typecheck clean. **NEXT: Shambu's ear
+verdict on the five lenses — that gate decides B1 (wiring the bank into the
+stream engine).** HALT.

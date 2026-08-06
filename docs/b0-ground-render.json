@@ -1,0 +1,51 @@
+{
+  "lens": "ground",
+  "section": "birth",
+  "from": 360,
+  "seconds": 60,
+  "calibratedFrom": 90,
+  "calibrateSeconds": 510,
+  "targets": {
+    "figuration": -19,
+    "lead": -21,
+    "ground": -23,
+    "chord": -25,
+    "weather": -34
+  },
+  "steadyStateMeasured": {
+    "ground": -22.999999999825043,
+    "chord": -25.00000000013472,
+    "figuration": -19.000000000131298,
+    "lead": -21.000000000074046,
+    "weather": -34.000000000103284
+  },
+  "clipMeasured": {
+    "ground": -22.707881422171276,
+    "chord": -23.40456611452138,
+    "figuration": -19.29835041140795,
+    "lead": -22.02625677604231,
+    "weather": -33.21658605713218
+  },
+  "trims": {
+    "ground": 0.6057926140938932,
+    "chord": 4.88313505037334,
+    "figuration": 19.465953857477857,
+    "lead": 19.72081174152249,
+    "weather": -7.111350444911412
+  },
+  "concurrency": {
+    "ground": 1,
+    "chord": 29,
+    "figuration": 3,
+    "lead": 4,
+    "weather": 1
+  },
+  "rawPeakDbfs": 10.816909175798617,
+  "masterTrimDb": -11.817,
+  "limitedDb": 0,
+  "limiterBusyFraction": 0,
+  "masterPeakDbfs": -1.0000909094450712,
+  "substitutions": {
+    "figuration:kalimba": 88
+  }
+}

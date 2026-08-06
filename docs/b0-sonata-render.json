@@ -1,0 +1,51 @@
+{
+  "lens": "sonata",
+  "section": "birth",
+  "from": 360,
+  "seconds": 60,
+  "calibratedFrom": 90,
+  "calibrateSeconds": 510,
+  "targets": {
+    "figuration": -19,
+    "lead": -21,
+    "ground": -23,
+    "chord": -25,
+    "weather": -34
+  },
+  "steadyStateMeasured": {
+    "ground": -22.999999999825043,
+    "chord": -25.00000000005206,
+    "figuration": -19.000000000054683,
+    "lead": -20.999999999722352,
+    "weather": -34.000000000148
+  },
+  "clipMeasured": {
+    "ground": -22.707881422171276,
+    "chord": -23.38218337281008,
+    "figuration": -18.219662642122977,
+    "lead": -19.951374336481635,
+    "weather": -33.22822957515378
+  },
+  "trims": {
+    "ground": 0.6057926140938932,
+    "chord": -3.6825109964332228,
+    "figuration": 13.53508856194344,
+    "lead": -3.359879031840748,
+    "weather": -7.887248021784927
+  },
+  "concurrency": {
+    "ground": 1,
+    "chord": 29,
+    "figuration": 3,
+    "lead": 4,
+    "weather": 1
+  },
+  "rawPeakDbfs": 3.4373324074334355,
+  "masterTrimDb": -11.817,
+  "limitedDb": 0,
+  "limiterBusyFraction": 0,
+  "masterPeakDbfs": -8.379667322885954,
+  "substitutions": {
+    "chord:strings-violin": 25
+  }
+}

@@ -1,0 +1,160 @@
+{
+  "_doc": [
+    "Slice B0 — THE LENS CONFIG. Instrument = MOOD LENS (user's choice) x ROLE,",
+    "shaded by the star's real colour (B-V). Never per-object.",
+    "",
+    "This file is the single source of truth for both consumers: the live app",
+    "(src/engine/audio/samplerLenses.ts, which types and validates it) and the",
+    "offline renderer (scripts/render-score.mjs). Keeping it as data, not code,",
+    "is what stops the two from drifting apart.",
+    "",
+    "Switching lenses must NEVER change pitches or timing — only timbre. Every",
+    "role in every lens therefore covers the same MIDI range; where a lens's",
+    "first-choice instrument cannot reach a note within `maxShiftSemitones`, the",
+    "bank falls through to the next instrument in the list.",
+    "",
+    "`gainDb` is a per-lens voicing offset applied BEFORE the mix law's stem",
+    "trims, so it shapes the blend inside a role without moving the stem target.",
+    "",
+    "Five lenses per MUSICAL_VISION.md section 5."
+  ],
+  "version": 1,
+  "roles": ["ground", "chord", "figuration", "lead", "weather"],
+  "defaults": {
+    "tonight": "ground",
+    "birthSky": "aurora"
+  },
+  "shading": {
+    "_doc": [
+      "The B-V hook. Every event already carries `timbre.{warmth,brightness}`,",
+      "derived by the mapping layer from the star's real B-V colour index.",
+      "Here that becomes a spectral tilt: a hot blue star (brightness -> 1) is",
+      "voiced brighter, a cool red one (warmth -> 1) darker. Same sample, same",
+      "pitch, same time — only the colour of the tone moves.",
+      "",
+      "`tiltDb` is the full-scale swing applied at brightness 0 vs 1 by a",
+      "one-pole shelf hinged at `hingeHz`. Kept modest on purpose: this is",
+      "shading, not an effect."
+    ],
+    "hingeHz": 900,
+    "tiltDb": 5.0,
+    "neutralBrightness": 0.5
+  },
+  "lenses": {
+    "aurora": {
+      "title": "Aurora",
+      "homage": "Sigur Ros",
+      "palette": "bowed-string pads, glass and chimes, huge slow swells",
+      "roles": {
+        "ground": [{ "instrument": "contrabass", "maxShiftSemitones": 7 }],
+        "chord": [
+          { "instrument": "strings-violin", "maxShiftSemitones": 5 },
+          { "instrument": "strings-cello", "maxShiftSemitones": 12 }
+        ],
+        "figuration": [
+          { "instrument": "hand-chimes", "maxShiftSemitones": 4 },
+          { "instrument": "glockenspiel", "maxShiftSemitones": 12 }
+        ],
+        "lead": [
+          { "instrument": "wine-glass", "maxShiftSemitones": 7 },
+          { "instrument": "hand-chimes", "maxShiftSemitones": 12 }
+        ],
+        "weather": [{ "instrument": "flute", "maxShiftSemitones": 6, "gainDb": -2 }]
+      }
+    },
+    "embrace": {
+      "title": "Embrace",
+      "homage": "Cigarettes After Sex",
+      "palette": "felt piano, warm cello bed, vibraphone glow — closest and most intimate",
+      "roles": {
+        "ground": [{ "instrument": "contrabass", "maxShiftSemitones": 7 }],
+        "chord": [
+          { "instrument": "strings-cello", "maxShiftSemitones": 5 },
+          { "instrument": "strings-violin", "maxShiftSemitones": 12 }
+        ],
+        "figuration": [
+          { "instrument": "vibraphone-soft", "maxShiftSemitones": 4 },
+          { "instrument": "kalimba", "maxShiftSemitones": 12 }
+        ],
+        "lead": [
+          { "instrument": "piano-felt", "maxShiftSemitones": 3 },
+          { "instrument": "vibraphone-soft", "maxShiftSemitones": 12 }
+        ],
+        "weather": [
+          { "instrument": "wine-glass", "maxShiftSemitones": 9, "gainDb": -2 },
+          { "instrument": "flute", "maxShiftSemitones": 12 }
+        ]
+      }
+    },
+    "sonata": {
+      "title": "Sonata",
+      "homage": "Beethoven",
+      "palette": "felt piano + chamber strings, motif-forward, the most composed lens",
+      "roles": {
+        "ground": [{ "instrument": "contrabass", "maxShiftSemitones": 7 }],
+        "chord": [
+          { "instrument": "strings-cello", "maxShiftSemitones": 5 },
+          { "instrument": "strings-violin", "maxShiftSemitones": 12 }
+        ],
+        "figuration": [
+          { "instrument": "piano-felt", "maxShiftSemitones": 3 },
+          { "instrument": "vibraphone-soft", "maxShiftSemitones": 12 }
+        ],
+        "lead": [
+          { "instrument": "strings-violin", "maxShiftSemitones": 4 },
+          { "instrument": "piano-felt", "maxShiftSemitones": 12 }
+        ],
+        "weather": [{ "instrument": "flute", "maxShiftSemitones": 6, "gainDb": -2 }]
+      }
+    },
+    "pulse": {
+      "title": "Pulse",
+      "homage": "Kid A",
+      "palette": "FM piano, bowed-metal pads, glass and glockenspiel — the electronic lens",
+      "roles": {
+        "ground": [{ "instrument": "contrabass", "maxShiftSemitones": 7 }],
+        "chord": [
+          { "instrument": "vibraphone-bowed", "maxShiftSemitones": 6 },
+          { "instrument": "wine-glass", "maxShiftSemitones": 12 }
+        ],
+        "figuration": [
+          { "instrument": "fm-piano", "maxShiftSemitones": 5 },
+          { "instrument": "kalimba", "maxShiftSemitones": 12 }
+        ],
+        "lead": [
+          { "instrument": "glockenspiel", "maxShiftSemitones": 5 },
+          { "instrument": "fm-piano", "maxShiftSemitones": 12 }
+        ],
+        "weather": [
+          { "instrument": "wine-glass", "maxShiftSemitones": 9, "gainDb": -2 },
+          { "instrument": "flute", "maxShiftSemitones": 12 }
+        ]
+      }
+    },
+    "ground": {
+      "title": "Ground",
+      "homage": "handpan hours",
+      "palette": "handpan and log drum, bowed vibraphone, bells, deep drone — the endless-background lens",
+      "roles": {
+        "ground": [{ "instrument": "contrabass", "maxShiftSemitones": 7 }],
+        "chord": [
+          { "instrument": "vibraphone-bowed", "maxShiftSemitones": 4 },
+          { "instrument": "strings-cello", "maxShiftSemitones": 12 }
+        ],
+        "figuration": [
+          { "instrument": "handpan", "maxShiftSemitones": 5 },
+          { "instrument": "slit-drum", "maxShiftSemitones": 4 },
+          { "instrument": "kalimba", "maxShiftSemitones": 12 }
+        ],
+        "lead": [
+          { "instrument": "hand-chimes", "maxShiftSemitones": 3 },
+          { "instrument": "hand-bells", "maxShiftSemitones": 12 }
+        ],
+        "weather": [
+          { "instrument": "wine-glass", "maxShiftSemitones": 9, "gainDb": -2 },
+          { "instrument": "flute", "maxShiftSemitones": 12 }
+        ]
+      }
+    }
+  }
+}
