@@ -31,3 +31,7 @@ scripts/.cache/
 # the committed mp3 from it; the WAV is 10 MB a minute and reproducible with
 # `npm run audition`, so only the mp3 goes in.
 docs/b0-*.wav
+
+# Playwright
+/test-results/
+/playwright-report/

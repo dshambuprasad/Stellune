@@ -1304,3 +1304,96 @@ is crest factor talking, not music. They are quiet on purpose; turn it up. Plus
 the same times. 351 existing tests pass, typecheck clean. **NEXT: Shambu's ear
 verdict on the five lenses — that gate decides B1 (wiring the bank into the
 stream engine).** HALT.
+
+**◇ DOUBLE REVIEW GATE — Atlas HQ · 2026-08-09 · A4 PASSED + B0 PASSED (incl.
+grounding gate) → and the MUSIC GATE IS PASSED BY SHAMBU.** A4: 351/351 tests
+(suite 8 s); movement table verified — the sky-dictated pillars match the v3
+sketch (origin Δ0 s, bloom 399 vs 398 s), six movements anchored to real
+prominences the sketch's ear missed (Peg/Cas/Aur), 8× density swing (273 vs 32
+figuration notes), Zimmer stack ramps/strips cleanly, on-scale preserved via
+whole-octave layers; the a3-score overwrite corruption caught+restored is
+endorsed. B0: all 133 notes carry URL/version/licence/SHA-256/date; Salamander
+stricter-of-two accepted; bowls→hand-bells honesty accepted; measured-pitch
+catch (mislabelled "F3"=F4) noted; per-lens ≤3 MB; mix law asserted and passing
+on all five lenses; renderer 15–19× real time (full session ~80 s on-device,
+rendered as two halves + HQ crossfade join at 330 s due to tool timeout).
+*Rulings:* (1) the mix law's ABSOLUTE stem targets are the ratified law — the
+"3–5 dB above bed" prose was HQ's imprecise gloss; measured +1.9 dB margin
+stands; future separation adjustments lower the bed. (2) ground/weather midi-45
+unison → engine-side registerHint fix is B1 task #1 (narrow, documented mapping
+exception for the audio stream). **SHAMBU'S VERDICT on the A4×Aurora full
+session + five lens clips: "The tunes are really good now. I am satisfied."**
+After three failed ear gates (static chord → events-over-drone → figuration-
+without-form), the composition + instruments stack has passed the only gate
+that matters. Defaults hold (Aurora birth / Ground endless) until he says
+otherwise. **ASSEMBLY PHASE OPEN: B1 (live instrument wiring) ∥ Phase 4 (the
+face) in parallel territories → then Phase 5 (PWA/share/GEO) → Slice C entry →
+Capacitor → App Store.**
+
+**◆ PHASE 4 — THE CALM FACE — 2026-08-07.** The app is no longer a placeholder:
+open it and your real sky is already drawn, press once and it sings, and the
+stars that are sounding glow. **THE STARFIELD is Canvas 2D, deliberately.** The
+load is ~4,400 stars above the horizon drawn as pre-rendered sprites, measured
+at **8.9 ms/frame on desktop (1440×900, 4,489 stars) and 1.7 ms on an iPhone 13
+viewport** — comfortably inside the 16.7 ms budget, with the honest reason to
+reach for WebGL (tens of thousands of points) an order of magnitude away. What
+staying in 2D buys is worth more than the headroom given up: no shader
+pipeline, no context-loss path, no driver variance, and it works in every
+browser the Capacitor ship path ends in. Deep-sky objects or the century
+time-scrub are the moment to switch, and projection/colour/glow are kept
+renderer-agnostic so the swap costs one file. **Projection is stereographic
+azimuthal** (zenith centre, horizon on the rim) rather than the simpler
+equidistant fisheye because it is conformal — constellations keep their real
+shapes to the horizon, and shape is precisely what §2.1 teaches the ear to
+recognise. North up, east LEFT: a view looking up, with the cardinal marks
+saying so. **Colour is the truth covenant applied to pixels:** catalogue B–V →
+effective temperature (Ballesteros 2012) → Planckian locus (Kim 2002) → sRGB.
+Blue stars are blue because they are hot. The one taste number on the screen is
+the *saturation* (0.68), pulled back from raw chromaticity because a real sky is
+nearer white than a bag of confetti — and it is labelled as taste in the source.
+**GLOW-SYNC works off two crossed sources:** the engine's meters give the true
+per-voice level, the app's own `renderWindow` says which stars the score intends
+to be sounding, and a level is only believed when both agree. That cross-check
+closes a real hole — `getLevelSources()` is only rebuilt when the voice *count*
+changes, so two different voice sets of equal size can leave the names stale;
+crossed, a stale name simply fails to match instead of lighting the wrong star.
+The current LEAD gets the strongest halo, a 2.5 s afterglow so the eye can find
+what the ear just heard, and its name in serif. **THE ONE PRINCIPLE IS ENFORCED
+STRUCTURALLY, not by discipline:** `gestures.ts` and `projection.ts` import the
+camera and nothing else — there is no path from a pan to the engine — and a
+Playwright test drags and pinches mid-session and asserts the piece's clock
+neither jumps nor resets. **THE SCREEN** is the walkthrough's list and nothing
+else: Tonight (geolocation optional, endless, Ground default) / Birth Sky (city
+autocomplete over the bundled 1,500, date, optional time, 11 minutes, Aurora
+default), five lenses, play/pause, the honesty label, and the time-compression
+line carrying **this session's own κ** ("about 45 minutes of real sky" for
+endless, 63 for the birth sky measured here) because κ is solved per session and
+a fixed figure would be a lie. No onboarding, no settings, no account. **States:
+loading / ready / playing / complete / no-geolocation / no-stars-up — never a
+crash, always a sentence and a way forward.** *Six defects found by looking at
+the screenshots rather than at the code:* `[hidden]` losing to `display: grid`,
+which left the Birth Sky fields showing in Tonight mode; the background wash
+scaling with zoom so the sky got *lighter* the closer you looked; the dome
+centred in the full viewport so the phone's panel buried its southern half (now
+the dome is fitted to the unoccluded area, measured, not guessed); the mode's
+default lens not being adopted on a switch; a translucent city dropdown that let
+the form ghost through it; and an endless session showing a full progress bar,
+which reads as "finished". **HONEST LIMIT:** the lens picker is fully wired as
+UI and state, but the live engine's only timbral dial is still `AudioStyle`
+('lush' | 'subtle'), so that is the whole of what a lens currently changes.
+B0's sampled instruments reach the stream in B1; the seam is one named function
+(`audioStyleForLens`) and it says so out loud. Also noted: the
+`ux-bar-birthsky.png` sketch is not in the repo — the quality floor was taken
+from this log's own description of it (all true stars above Bengaluru, B–V
+coloured, magnitude sized, sounding stars haloed), and the screenshots below are
+against that. **EVIDENCE:** 16 screenshots — every state at desktop 1440×900
+(Chromium) and iPhone 13 (**mobile WebKit**, the engine iOS actually ships) —
+`docs/phase4-*.png`; 14 Playwright tests green across both, covering load →
+session → canvas-keeps-animating (asserted by pixel diff, not by a single
+frame), the camera invariant, and a refused location; **Lighthouse on the
+production build: 100 desktop / 98 mobile, 297 KiB transferred, FCP 0.3 s /
+1.9 s, CLS 0.01**. The first Lighthouse run scored 63 and was thrown away — it
+had hit a dev server serving a 3 MB unminified Tone.js, which is a measurement
+of the harness, not the app. 385 unit tests pass; typecheck clean. **NEXT:
+Shambu's eye on the sixteen screenshots — that gate decides whether Phase 4 is
+done or the face needs another pass.** HALT.

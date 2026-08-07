@@ -25,9 +25,13 @@
     "render": "node scripts/render-score.mjs",
     "audition": "node scripts/render-audition.mjs",
     "check:mix-law": "node scripts/check-mix-law.mjs",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "test:smoke": "playwright test smoke",
+    "screens": "playwright test screens"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@types/node": "^26.1.2",
     "typescript": "~6.0.2",
     "vite": "^8.2.0",

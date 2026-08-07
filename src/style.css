@@ -1,124 +1,599 @@
+/**
+ * Phase 4 — the calm face.
+ *
+ * The design language is set by what the product is for: a thing you open, press
+ * once, and put down. So the screen is near-black, the chrome is thin, the type
+ * is quiet, and nothing moves that is not the sky. Serif is used only where a
+ * human voice is speaking — the title, the star's name, the honesty label —
+ * and everything mechanical stays in the system sans.
+ *
+ * The sky is the page. Every control floats over it and is allowed to be
+ * ignored.
+ */
+
 :root {
-  --ink: #e8ecf5;
-  --ink-dim: #97a3bd;
-  --deep: #05070f;
+  --ink: #e6ebf6;
+  --ink-dim: #93a0bb;
+  --ink-faint: #6a7691;
+  --deep: #04060d;
+  --edge: rgba(150, 170, 210, 0.16);
+  --edge-strong: rgba(170, 190, 230, 0.32);
+  --glass: rgba(9, 13, 24, 0.72);
+  --serif: ui-serif, Georgia, 'Times New Roman', serif;
+  --panel-max: 38rem;
+
   color-scheme: dark;
   font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
-  line-height: 1.6;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
 }
 
 * {
   box-sizing: border-box;
 }
 
-body {
-  margin: 0;
-  min-height: 100vh;
-  display: grid;
-  place-items: center;
-  padding: 2rem 1.25rem;
-  color: var(--ink);
-  background:
-    radial-gradient(ellipse 120% 80% at 50% -10%, #17203a 0%, transparent 60%),
-    var(--deep);
+/*
+ * `hidden` must actually hide. The UA stylesheet's `[hidden] { display: none }`
+ * loses to any class that sets a display, and several panels here are grids and
+ * flex rows — which is how the Birth Sky fields ended up visible in Tonight
+ * mode. State is expressed with the attribute everywhere in this app, so it is
+ * worth one `!important` to make the attribute mean what it says.
+ */
+[hidden] {
+  display: none !important;
 }
 
-.shell {
-  max-width: 34rem;
-  text-align: center;
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overscroll-behavior: none;
+}
+
+body {
+  color: var(--ink);
+  background: var(--deep);
+  overflow: hidden;
+}
+
+#app {
+  position: fixed;
+  inset: 0;
+  display: block;
+}
+
+/* ---- the sky ----------------------------------------------------------- */
+
+#sky {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none; /* the canvas owns pan and pinch */
+  cursor: grab;
+}
+
+#sky:active {
+  cursor: grabbing;
+}
+
+/* ---- the top line ------------------------------------------------------ */
+
+.topbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 1.35rem 1.4rem 2.5rem;
+  pointer-events: none;
+  background: linear-gradient(to bottom, rgba(4, 6, 13, 0.72), transparent);
 }
 
 h1 {
-  margin: 0 0 0.35rem;
-  font-size: clamp(2.5rem, 9vw, 4rem);
-  font-weight: 300;
-  letter-spacing: 0.12em;
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 1.18rem;
+  font-weight: 400;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ink);
+  opacity: 0.92;
 }
 
-.tagline {
-  margin: 0 0 2rem;
-  font-size: 1.05rem;
+.status {
+  margin: 0.2rem 0 0;
+  font-size: 0.8rem;
+  letter-spacing: 0.02em;
   color: var(--ink-dim);
 }
 
-.status,
-.honesty {
-  margin: 0 auto 1rem;
-  max-width: 30rem;
-  font-size: 0.85rem;
+/* ---- messages ---------------------------------------------------------- */
+
+.problem {
+  position: absolute;
+  top: 5.2rem;
+  left: 1.4rem;
+  right: 1.4rem;
+  margin: 0;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--edge);
+  border-radius: 0.7rem;
+  background: var(--glass);
+  backdrop-filter: blur(14px);
+  font-size: 0.82rem;
   color: var(--ink-dim);
+  max-width: 32rem;
 }
 
-.honesty {
-  padding-top: 1rem;
-  border-top: 1px solid rgb(255 255 255 / 8%);
-  font-style: italic;
+.complete {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  padding: 1.6rem 1.8rem;
+  border: 1px solid var(--edge);
+  border-radius: 1rem;
+  background: var(--glass);
+  backdrop-filter: blur(18px);
+  max-width: min(24rem, calc(100vw - 2.8rem));
 }
 
-.error {
-  color: #ffb4a2;
+.complete p {
+  margin: 0 0 1.1rem;
+  font-family: var(--serif);
+  font-size: 1.02rem;
+  color: var(--ink);
 }
 
-/* ---- Phase 3 dev harness only (harness.html is not part of the build) ---- */
-.harness {
-  max-width: 62rem;
-  text-align: left;
+.complete-actions {
+  display: flex;
+  gap: 0.6rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+/* ---- the panel --------------------------------------------------------- */
+
+.panel {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  /* Full-bleed backdrop, column-width content. A panel narrower than the
+     screen leaves two hard vertical seams down the sky where its gradient
+     stops; the wash has to run edge to edge even though the controls do not. */
+  width: 100%;
+  padding: 0.9rem 1.4rem calc(1rem + env(safe-area-inset-bottom, 0px));
+  /* Fades out well before the top of the panel so the sky is never cut by a
+     hard edge — the controls sit *in* the night rather than on a bar. */
+  background: linear-gradient(to top, rgba(4, 6, 13, 0.94) 62%, rgba(4, 6, 13, 0.55) 88%, transparent);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.panel > * {
+  width: 100%;
+  max-width: var(--panel-max);
+}
+
+.progress {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.progress-track {
+  flex: 1;
+  height: 2px;
+  background: rgba(150, 170, 210, 0.18);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  width: 0;
+  background: linear-gradient(to right, rgba(160, 190, 255, 0.5), rgba(226, 235, 255, 0.85));
+  transition: width 0.25s linear;
+}
+
+.elapsed {
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-faint);
+  min-width: 5.4ch;
+  text-align: right;
 }
 
 .controls {
   display: flex;
-  gap: 0.75rem;
-  margin: 1.5rem 0;
+  align-items: center;
+  gap: 0.8rem;
 }
 
-.controls button {
-  padding: 0.55rem 1.4rem;
-  border: 1px solid rgb(255 255 255 / 25%);
+.tabs {
+  display: flex;
+  gap: 0.2rem;
+  padding: 0.2rem;
+  border: 1px solid var(--edge);
   border-radius: 999px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.tabs button {
+  appearance: none;
+  border: 0;
   background: transparent;
+  color: var(--ink-dim);
+  font: inherit;
+  font-size: 0.8rem;
+  letter-spacing: 0.02em;
+  padding: 0.42rem 0.95rem;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: color 0.2s ease, background 0.2s ease;
+}
+
+.tabs button[aria-selected='true'] {
+  background: rgba(226, 235, 255, 0.1);
+  color: var(--ink);
+}
+
+.play {
+  margin-left: auto;
+  appearance: none;
+  border: 1px solid var(--edge-strong);
+  border-radius: 999px;
+  background: rgba(226, 235, 255, 0.07);
   color: var(--ink);
   font: inherit;
-  font-size: 0.9rem;
+  font-size: 0.86rem;
+  letter-spacing: 0.06em;
+  padding: 0.58rem 1.9rem;
   cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
 }
 
-.controls button:hover:not(:disabled) {
-  background: rgb(255 255 255 / 8%);
+.play:hover:not(:disabled) {
+  background: rgba(226, 235, 255, 0.13);
+  border-color: rgba(190, 210, 250, 0.5);
 }
 
-.controls button:disabled {
-  opacity: 0.35;
+.play:disabled {
+  opacity: 0.4;
   cursor: default;
 }
 
-.score,
-.levels {
-  overflow-x: auto;
-  margin: 0 0 1rem;
-  font-size: 0.72rem;
-  line-height: 1.7;
-  color: var(--ink-dim);
-  white-space: pre;
+/* ---- birth sky fields -------------------------------------------------- */
+
+.birth-fields {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr 0.8fr;
+  gap: 0.6rem;
 }
 
-.controls label {
-  display: inline-flex;
-  gap: 0.4rem;
-  align-items: center;
-  font-size: 0.8rem;
-  color: var(--ink-dim);
+.field {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.22rem;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
 }
 
-.controls select,
-.controls input {
-  padding: 0.35rem 0.5rem;
-  border: 1px solid rgb(255 255 255 / 20%);
-  border-radius: 6px;
+.field em {
+  font-style: normal;
+  opacity: 0.6;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.field input {
+  appearance: none;
+  border: 1px solid var(--edge);
+  border-radius: 0.55rem;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.86rem;
+  letter-spacing: 0;
+  text-transform: none;
+  padding: 0.5rem 0.65rem;
+  width: 100%;
+  min-width: 0;
+}
+
+.field input:focus-visible {
+  outline: none;
+  border-color: rgba(190, 210, 250, 0.55);
+}
+
+.city-results {
+  position: absolute;
+  bottom: calc(100% + 0.35rem);
+  left: 0;
+  right: 0;
+  z-index: 4;
+  border: 1px solid var(--edge);
+  border-radius: 0.6rem;
+  /* Fully opaque: a translucent list over a form lets the fields behind it
+     read through as ghost text, which on a small screen looks like a rendering
+     fault rather than a menu. */
+  background: #070a14;
+  overflow: hidden;
+  max-height: 13rem;
+  overflow-y: auto;
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.6);
+}
+
+.city-option {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.6rem;
+  width: 100%;
+  appearance: none;
+  border: 0;
+  border-bottom: 1px solid rgba(150, 170, 210, 0.08);
   background: transparent;
   color: var(--ink);
   font: inherit;
-  font-size: 0.8rem;
+  font-size: 0.84rem;
+  text-transform: none;
+  letter-spacing: 0;
+  text-align: left;
+  padding: 0.5rem 0.7rem;
+  cursor: pointer;
 }
 
-.controls input { width: 5.5rem; }
-.controls option { background: #10141f; }
+.city-option:last-child {
+  border-bottom: 0;
+}
+
+.city-option:hover,
+.city-option.is-active {
+  background: rgba(226, 235, 255, 0.09);
+}
+
+.city-option small {
+  color: var(--ink-faint);
+  font-size: 0.72rem;
+}
+
+/* ---- lenses ------------------------------------------------------------ */
+
+.lenses {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.lenses button {
+  appearance: none;
+  border: 1px solid var(--edge);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-dim);
+  font: inherit;
+  font-size: 0.76rem;
+  letter-spacing: 0.04em;
+  padding: 0.34rem 0.8rem;
+  cursor: pointer;
+  transition: color 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+}
+
+.lenses button[aria-pressed='true'] {
+  color: var(--ink);
+  background: rgba(226, 235, 255, 0.1);
+  border-color: rgba(190, 210, 250, 0.42);
+}
+
+.lens-note {
+  margin: -0.35rem 0 0;
+  font-size: 0.74rem;
+  color: var(--ink-faint);
+}
+
+/* Endless mode: no bar to fill, because there is no end to fill it to. */
+.progress[data-shape='endless'] .progress-track {
+  background: transparent;
+}
+
+.progress[data-shape='endless'] .elapsed {
+  min-width: 0;
+}
+
+/* ---- the honest words -------------------------------------------------- */
+
+.compression {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 0.86rem;
+  color: var(--ink-dim);
+}
+
+.honesty {
+  margin: 0;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: var(--ink-faint);
+}
+
+.honesty.subtle {
+  opacity: 0.75;
+}
+
+.footer-row {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.ghost {
+  appearance: none;
+  border: 1px solid var(--edge);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-dim);
+  font: inherit;
+  font-size: 0.78rem;
+  padding: 0.4rem 1rem;
+  cursor: pointer;
+  transition: color 0.2s ease, border-color 0.2s ease;
+}
+
+.ghost:hover {
+  color: var(--ink);
+  border-color: var(--edge-strong);
+}
+
+.ghost.tiny {
+  font-size: 0.68rem;
+  padding: 0.24rem 0.7rem;
+  color: var(--ink-faint);
+}
+
+/* ---- states ------------------------------------------------------------ */
+
+#app[data-screen='loading'] .topbar .status::after {
+  content: '';
+  display: inline-block;
+  width: 0.4em;
+  animation: ellipsis 1.4s steps(4, end) infinite;
+}
+
+@keyframes ellipsis {
+  0% { content: ''; }
+  25% { content: '.'; }
+  50% { content: '..'; }
+  75% { content: '...'; }
+}
+
+/* ---- phones ------------------------------------------------------------ */
+
+/*
+ * A phone is where this product is actually used, and where the panel most
+ * threatens to eat the sky. Everything below is about giving the night back
+ * its screen: one scrolling row of lenses instead of two wrapped ones, smaller
+ * type, tighter gaps — without dropping a single thing the walkthrough lists,
+ * the honesty label included.
+ */
+@media (max-width: 30rem) {
+  .topbar {
+    padding: 0.9rem 1rem 2rem;
+  }
+
+  h1 {
+    font-size: 1rem;
+    letter-spacing: 0.2em;
+  }
+
+  .status {
+    font-size: 0.74rem;
+  }
+
+  .panel {
+    padding: 0.7rem 1rem calc(0.7rem + env(safe-area-inset-bottom, 0px));
+    gap: 0.5rem;
+    background: linear-gradient(to top, rgba(4, 6, 13, 0.97) 68%, rgba(4, 6, 13, 0.72) 90%, transparent);
+  }
+
+  .birth-fields {
+    grid-template-columns: 1fr 1fr;
+    gap: 0.45rem;
+  }
+
+  .city-field {
+    grid-column: 1 / -1;
+  }
+
+  /* One row that scrolls, never two that wrap: a second row of chips costs
+     ~44px of sky and makes the panel look like a form. */
+  .lenses {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 0.1rem;
+  }
+
+  .lenses::-webkit-scrollbar {
+    display: none;
+  }
+
+  .lenses button {
+    flex: 0 0 auto;
+    font-size: 0.72rem;
+    padding: 0.3rem 0.7rem;
+  }
+
+  /* On a phone the city field sits at the top of the fields, so a dropdown
+     opening upward buries the tabs and the Play button — the two things that
+     must never disappear. It opens downward here instead, over the date and
+     time, which are secondary and still one tap away. */
+  .city-results {
+    top: calc(100% + 0.35rem);
+    bottom: auto;
+    max-height: 11rem;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+  }
+
+  .lens-note {
+    font-size: 0.68rem;
+    /* One line on a phone; the full palette is a nicety, the lens name is not. */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .compression {
+    font-size: 0.8rem;
+  }
+
+  .honesty {
+    font-size: 0.63rem;
+    line-height: 1.42;
+  }
+
+  .play {
+    padding: 0.5rem 1.3rem;
+    font-size: 0.8rem;
+  }
+
+  .tabs button {
+    padding: 0.38rem 0.8rem;
+    font-size: 0.76rem;
+  }
+
+  .footer-row {
+    margin-top: -0.2rem;
+  }
+}
+
+/* Short landscape phones: the panel must not eat the sky. */
+@media (max-height: 30rem) {
+  .honesty {
+    display: none;
+  }
+
+  .panel {
+    gap: 0.45rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progress-fill {
+    transition: none;
+  }
+}
+
+:focus-visible {
+  outline: 2px solid rgba(190, 210, 250, 0.6);
+  outline-offset: 2px;
+}
