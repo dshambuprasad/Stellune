@@ -461,6 +461,17 @@ h1 {
 
 /* ---- states ------------------------------------------------------------ */
 
+/*
+ * The veil. Slice B1.1: the player will not start a note until every instrument
+ * it needs has loaded, so there is a short, honest wait — and a wait a user can
+ * see the reason for is not a wait they resent.
+ */
+#app[data-screen='tuning'] .topbar .status,
+#app[data-screen='tuning'] .topbar .status::after {
+  color: var(--ink-dim);
+}
+
+#app[data-screen='tuning'] .topbar .status::after,
 #app[data-screen='loading'] .topbar .status::after {
   content: '';
   display: inline-block;

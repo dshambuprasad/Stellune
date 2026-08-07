@@ -3,15 +3,15 @@
  *
  * This is the seam between the app and the engine's public surface. It touches
  * exactly four things — `prepareSession`, `renderWindow`, `createStreamEngine`
- * and `getLevels()`/`getLevelSources()` — and nothing else, so the parallel
+ * and `getLevels()`/`levelSources()` — and nothing else, so the parallel
  * B1 stream can rework the audio internals without this file noticing.
  *
  * WHAT DRIVES THE MUSIC: when and where, and the lens. Nothing else. The camera
  * is not an input here and never will be.
  */
 
-import type { City, ObserverInput, Star, StreamEngine } from '../engine/index.ts';
-import { createStreamEngine } from '../engine/index.ts';
+import type { City, ObserverInput, SampledStream, Star } from '../engine/index.ts';
+import { createSampledStreamFromUrl } from '../engine/index.ts';
 // The Living Sky surface is published by the mapping layer's own index; the
 // top-level engine barrel does not forward it, and that barrel belongs to the
 // parallel stream. Importing the layer's public entry point directly is the
@@ -23,7 +23,6 @@ import type {
 } from '../engine/mapping/index.ts';
 import { prepareSession, renderWindow } from '../engine/mapping/index.ts';
 import type { LensId } from './lenses.ts';
-import { audioStyleForLens } from './lenses.ts';
 import type { GlowState } from './starfield.ts';
 
 export type SessionMode = 'tonight' | 'birth-sky';
@@ -61,7 +60,7 @@ export class Session {
   /** Total length in seconds; Infinity for endless. */
   readonly totalSeconds: number;
 
-  #engine: StreamEngine | null = null;
+  #engine: SampledStream | null = null;
   #window: ScoreWindow;
   #starNames = new Map<string, string | undefined>();
 
@@ -111,10 +110,13 @@ export class Session {
   async play(fromSeconds = this.#elapsed): Promise<void> {
     this.#elapsed = fromSeconds;
     if (!this.#engine) {
-      this.#engine = createStreamEngine(this.plan, {
-        style: audioStyleForLens(this.#lens),
-        meters: true,
-      });
+      // SLICE B1.1 — the seam is closed. This was `createStreamEngine`, the
+      // Phase 3.5 synth palette, with the lens reduced to a reverb voicing;
+      // it is now the sampled player, so a lens really is an instrument
+      // change. `createSampledStreamFromUrl` does not resolve until the lens's
+      // instruments are all loaded, which is the "tuning the sky" veil's whole
+      // reason for existing: never a wrong note while a sample is in flight.
+      this.#engine = await createSampledStreamFromUrl(this.plan, { lensId: this.#lens });
     }
     await this.#engine.play(fromSeconds);
     this.#startedAt = performance.now() - fromSeconds * 1000;
@@ -130,20 +132,18 @@ export class Session {
    * Change the mood lens without changing the music's pitches or timing.
    *
    * The piece resumes at the same second it was at, because a lens is a change
-   * of instrument, not a change of piece. (Until B1 lands the sampled
-   * instruments, the only timbral difference the engine can express is its
-   * reverb/chorus voicing — see `audioStyleForLens`. The seam is here so that
-   * wiring is a one-line change.)
+   * of instrument, not a change of piece — and since B1.1 it no longer even
+   * pauses: the player loads the new lens in full, then crosses at the next
+   * window edge, so the music runs straight through the change.
    */
   async setLens(lens: LensId): Promise<void> {
     if (lens === this.#lens) return;
     this.#lens = lens;
-    const wasPlaying = this.#playing;
-    const at = this.#elapsed;
-    this.#engine?.stop();
-    this.#engine?.dispose();
-    this.#engine = null;
-    if (wasPlaying) await this.play(at);
+    if (this.#engine) {
+      await this.#engine.setLens(lens);
+      return;
+    }
+    if (this.#playing) await this.play(this.#elapsed);
   }
 
   dispose(): void {
@@ -240,10 +240,10 @@ export class Session {
 
     const engine = this.#engine;
     if (engine && this.#playing) {
-      // getLevels() must be called before getLevelSources(): it is what
+      // getLevels() must be called before levelSources(): it is what
       // refreshes the source list.
       const measured = engine.getLevels();
-      const sources = engine.getLevelSources();
+      const sources = engine.levelSources();
       for (let i = 0; i < measured.length; i++) {
         const id = sources[i];
         const value = measured[i];

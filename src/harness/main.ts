@@ -218,7 +218,7 @@ function teardown(): void {
 
 async function main(): Promise<void> {
   catalog = await loadStarCatalog();
-  const catalogue = await loadSampleCatalogue('/samples');
+  const catalogue = await loadSampleCatalogue();
   lenses = catalogue.lenses;
 
   for (const [id, lens] of Object.entries(lenses.lenses)) {
@@ -277,6 +277,10 @@ async function main(): Promise<void> {
 
     void createSampledStreamFromUrl(plan, {
       lensId: lensSelect.value,
+      // Slice B1.1: always on in the harness. This is the tool the ear report
+      // gets correlated against, and a diagnostic you have to remember to turn
+      // on is one you will not have when the artefact happens.
+      diagnostics: true,
       onProgress: (loaded, total) => {
         // Only while the FIRST lens is loading. A lens swap loads its
         // fall-through tier in the background long after the swap has

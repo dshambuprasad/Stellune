@@ -14,7 +14,6 @@
  * silently.
  */
 
-import type { AudioStyle } from '../engine/index.ts';
 
 export type LensId = 'aurora' | 'embrace' | 'sonata' | 'pulse' | 'ground';
 
@@ -72,32 +71,6 @@ export function isLensId(value: string): value is LensId {
   return LENSES.some((lens) => lens.id === value);
 }
 
-/**
- * THE B1 SEAM.
- *
- * Today the streaming engine's only timbral dial is `AudioStyle` — 'lush' or
- * 'subtle' — so that is the honest extent of what a lens can change right now:
- * how much air and shimmer sits around the voices. The sampled instruments that
- * make Aurora sound like strings and Ground sound like a handpan are built and
- * measured (Slice B0) but are not wired into the live stream yet; that is B1
- * task #2, and it replaces this function.
- *
- * Deliberately NOT hidden behind a friendlier name: a reader should be able to
- * see exactly how far the lens currently reaches.
- */
-export function audioStyleForLens(lens: LensId): AudioStyle {
-  switch (lens) {
-    case 'aurora':
-    case 'ground':
-      // The two lenses built on huge sustained space.
-      return 'lush';
-    case 'embrace':
-    case 'sonata':
-    case 'pulse':
-      // The three that want the voices closer and drier.
-      return 'subtle';
-  }
-}
 
 /**
  * Cross-check the UI's lens list against the sample bundle B0 built.

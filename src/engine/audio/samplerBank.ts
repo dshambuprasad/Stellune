@@ -24,6 +24,7 @@
 import * as Tone from 'tone';
 
 import type { VoiceRole } from '../mapping/index.ts';
+import { samplesBase } from './assetBase.ts';
 import type { LensConfig, SampleManifest, ChosenVoice } from './samplerLenses.ts';
 import {
   LENS_ROLES,
@@ -39,6 +40,15 @@ export interface SamplerBankOptions {
   format?: 'ogg' | 'mp3';
   /** Called whenever loading progress changes, 0..1. */
   onProgress?: (loaded: number, total: number) => void;
+  /**
+   * Called the moment one instrument becomes playable.
+   *
+   * `onProgress` counts; this names. Slice B1.1 needed to know WHICH instrument
+   * arrived WHEN, to line the arrivals up against an ear report — a count tells
+   * you a download finished, not that the flute finished eight seconds after
+   * the first flute note was due.
+   */
+  onInstrumentReady?: (instrument: string, tier: 'primary' | 'fallback') => void;
 }
 
 /** Ask the browser what it can actually play, rather than assuming. */
@@ -56,7 +66,7 @@ export function preferredFormat(): 'ogg' | 'mp3' {
  * so callers can supply them from anywhere (tests, a service worker, a bundle).
  */
 export async function loadSampleCatalogue(
-  baseUrl = '/samples',
+  baseUrl = samplesBase(),
 ): Promise<{ manifest: SampleManifest; lenses: LensConfig }> {
   const [manifest, lenses] = await Promise.all([
     fetch(`${baseUrl}/manifest.json`).then((r) => {
@@ -83,6 +93,9 @@ export class SamplerBank {
   readonly #baseUrl: string;
   readonly #format: 'ogg' | 'mp3';
   readonly #onProgress: ((loaded: number, total: number) => void) | undefined;
+  readonly #onInstrumentReady:
+    | ((instrument: string, tier: 'primary' | 'fallback') => void)
+    | undefined;
 
   /** instrument id → sampler, once it has been asked for. */
   readonly #samplers = new Map<string, Tone.Sampler>();
@@ -110,9 +123,10 @@ export class SamplerBank {
     }
     this.#manifest = manifest;
     this.#lenses = lenses;
-    this.#baseUrl = options.baseUrl ?? '/samples';
+    this.#baseUrl = options.baseUrl ?? samplesBase();
     this.#format = options.format ?? preferredFormat();
     this.#onProgress = options.onProgress;
+    this.#onInstrumentReady = options.onInstrumentReady;
   }
 
   get format(): 'ogg' | 'mp3' {
@@ -148,10 +162,16 @@ export class SamplerBank {
         return v;
       });
 
-    await Promise.all(primary.map((id) => track(this.#loadInstrument(id))));
-    const rest = Promise.all(fallback.map((id) => track(this.#loadInstrument(id)))).then(
-      () => undefined,
-    );
+    const announce = (id: string, tier: 'primary' | 'fallback') => (p: Promise<Tone.Sampler>) =>
+      p.then((v) => {
+        this.#onInstrumentReady?.(id, tier);
+        return v;
+      });
+
+    await Promise.all(primary.map((id) => track(announce(id, 'primary')(this.#loadInstrument(id)))));
+    const rest = Promise.all(
+      fallback.map((id) => track(announce(id, 'fallback')(this.#loadInstrument(id)))),
+    ).then(() => undefined);
     return { whenComplete: rest };
   }
 

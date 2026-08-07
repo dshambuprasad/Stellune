@@ -13,17 +13,22 @@
     <meta name="color-scheme" content="dark" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <title>Cosmophony — the real sky, as calm ambient sound</title>
+    <!-- Installable: the shared link is the whole distribution story, so it
+         should be able to become an icon on a phone. `start_url` and
+         `scope` are relative so the same manifest works at a domain root
+         and under a GitHub project path. -->
+    <link rel="manifest" href="manifest.webmanifest" />
+    <title>Stellune — the real sky, as calm ambient sound</title>
     <meta
       name="description"
-      content="Cosmophony turns the real stars above a place and date into calm ambient music. A star sounds when it truly rises, culminates or sets. Runs entirely in your browser; nothing you enter is sent anywhere."
+      content="Stellune turns the real stars above a place and date into calm ambient music. A star sounds when it truly rises, culminates or sets. Runs entirely in your browser; nothing you enter is sent anywhere."
     />
   </head>
   <body>
     <div id="app" data-screen="loading"></div>
     <noscript>
       <p style="color: #93a0bb; font-family: system-ui, sans-serif; padding: 2rem">
-        Cosmophony computes a real sky in your browser, so it needs JavaScript
+        Stellune computes a real sky in your browser, so it needs JavaScript
         switched on. Nothing you enter is ever sent anywhere.
       </p>
     </noscript>

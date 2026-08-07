@@ -42,6 +42,7 @@ import {
   integratedLufs,
   lufsTrimDb,
   bandLevelDb,
+  limitTransients,
 } from './lib/mastering.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -103,7 +104,7 @@ function parseArgs(argv) {
  * kill. So an event without a hint gets the one the renderer used to apply, and
  * an event WITH a hint is left alone: the score wins wherever it has an opinion.
  */
-function withRegisterHints(events) {
+export function withRegisterHints(events) {
   return events.map((event) =>
     event.role === 'weather' && event.registerHint === undefined
       ? { ...event, registerHint: WEATHER_OCTAVE_SHIFT }
@@ -465,6 +466,8 @@ export async function render(options) {
   const measured = {};
   const measuredRaw = {};
   const glueConfig = sampler.lenses.mastering?.figurationGlue;
+  const limiterLaw = sampler.lenses.mastering?.limiter;
+  const stemLimiting = {};
   let glueDb = 0;
   for (const role of ROLES) {
     measuredRaw[role] = measureStem(stems[role]);
@@ -479,6 +482,17 @@ export async function render(options) {
     // macro arc is the composition — nothing else on this bus is compressed.
     if (role === 'figuration' && glueConfig) {
       glueDb = glueCompress(stems[role], SAMPLE_RATE, glueConfig);
+    }
+    // THE RATIFIED AMENDMENT: transient limiting on the stems that carry
+    // transients, and on no others. `zeroEngagementStems` is not a rule this
+    // loop obeys — it is a list of the stems that never get a limiter at all,
+    // so the bed's zero engagement is a property of the graph rather than a
+    // number to be checked and hoped for.
+    if (limiterLaw && !(limiterLaw.zeroEngagementStems ?? []).includes(role)) {
+      const result = limitTransients(stems[role], SAMPLE_RATE, limiterLaw);
+      stemLimiting[role] = result;
+    } else {
+      stemLimiting[role] = { worstDb: 0, engagedFraction: 0 };
     }
     for (let i = 0; i < frames; i++) {
       master[0][i] += L[i];
@@ -520,10 +534,16 @@ export async function render(options) {
   const peakCeilingTrimDb = Number.isFinite(rawPeakDbfs)
     ? MASTER.limiterCeilingDbfs - rawPeakDbfs
     : 0;
+  // SLICE B1.1 — the master fader is now the LOUDNESS fader, full stop. The
+  // peak guard used to outrank it and that is what left three lenses up to
+  // 8.9 dB under target; with transients limited at the stems, the peaks that
+  // forced the guard no longer arrive here. `peakCeilingTrimDb` is still
+  // measured and reported so a regression shows up as a number rather than as
+  // a surprise.
   const masterTrimDb =
     opts.masterTrimDb != null && Number.isFinite(opts.masterTrimDb)
       ? opts.masterTrimDb
-      : Math.min(loudnessTrimDb, peakCeilingTrimDb);
+      : loudnessTrimDb;
   if (masterTrimDb !== 0) {
     const g = dbToGain(masterTrimDb);
     for (let i = 0; i < frames; i++) {
@@ -589,6 +609,7 @@ export async function render(options) {
     masterPeakDbfs,
     masterLufs,
     glueDb,
+    stemLimiting,
     motionBandDb,
     motionLeadDb,
     voiceCount: printed.voiceCount,

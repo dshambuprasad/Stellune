@@ -17,6 +17,49 @@
  * also what makes it testable without a browser.
  */
 
+/**
+ * How far a note may be resampled before it stops sounding like the instrument.
+ *
+ * Slice B1.1, from measurement. The live path resamples with the browser's own
+ * `playbackRate`, which is linear interpolation; the offline path uses 4-point
+ * Hermite. At small shifts the two are indistinguishable, but at +5 and beyond
+ * the linear one images badly — bright, sharp, and nothing like the recording.
+ * That is the difference between "offline clean, live defective" on the SAME
+ * score, and the B1.1 log found far shifts clustered in two of the three
+ * windows Shambu flagged.
+ *
+ * Three semitones is a quarter-tone shy of a minor third: enough that a modest
+ * sample set is affordable, tight enough that a struck instrument's transient
+ * and a sustained one's formants stay where they belong.
+ */
+export const MAX_SHIFT_SEMITONES = 3;
+
+/**
+ * The register every lens must be able to play, MIDI.
+ *
+ * Stated once, here, and applied before any instrument is chosen — which is
+ * what keeps it lens-INDEPENDENT. A pitch outside it is folded by whole
+ * octaves until it is inside, so the pitch class (and therefore the scale) is
+ * untouched and every lens folds identically.
+ *
+ * Folding per instrument was the obvious alternative and is wrong: each lens's
+ * instruments have different ceilings, so the same score event would sound an
+ * octave apart in two lenses. "A lens changes what a note sounds like, never
+ * which note it is" is a ratified invariant, and a fix that breaks it is not a
+ * fix.
+ */
+export const PLAYABLE_MIDI_RANGE = [24, 96];
+
+/** Fold a pitch into a range by whole octaves. Pitch class is preserved. */
+export function foldIntoRange(midi, [lo, hi] = PLAYABLE_MIDI_RANGE) {
+  let folded = midi;
+  while (folded < lo) folded += 12;
+  while (folded > hi) folded -= 12;
+  // A range narrower than an octave cannot always be satisfied; clamp so the
+  // function is total rather than looping.
+  return Math.max(lo, Math.min(hi, folded));
+}
+
 /** Roles, in the order the mix law lists them. */
 export const SCHEDULE_ROLES = ['ground', 'chord', 'figuration', 'lead', 'weather'];
 
@@ -51,8 +94,8 @@ const round = (v, places) => {
  * so no renderer has to remember. Weather carries +12; before that hint existed,
  * ground and weather both sounded midi 45 for an entire session.
  */
-export function voicedMidi(event) {
-  return event.midi + (event.registerHint ?? 0);
+export function voicedMidi(event, range = PLAYABLE_MIDI_RANGE) {
+  return foldIntoRange(event.midi + (event.registerHint ?? 0), range);
 }
 
 /**
@@ -86,6 +129,12 @@ export function chooseVoiceFor(lenses, manifest, lensId, role, midi) {
   const chain = lens.roles[role];
   if (!chain || chain.length === 0) throw new Error(`lens "${lensId}" has no role "${role}"`);
 
+  // The chain is walked twice. First pass: take the earliest link that can
+  // reach this pitch INSIDE THE SHIFT CAP — the lens's preference wins, but
+  // only among instruments that will actually sound like themselves. Second
+  // pass (`fallback`): the link that gets closest, for a pitch no instrument in
+  // the chain can cover; the caller logs those, and the lens config is the
+  // place to fix them, not the renderer.
   let fallback = null;
   for (const link of chain) {
     const entry = manifest.instruments[link.instrument];
@@ -113,8 +162,11 @@ export function chooseVoiceFor(lenses, manifest, lensId, role, midi) {
       loopStart: entry.loop?.start ?? null,
       loopEnd: entry.loop?.end ?? null,
     };
-    if (Math.abs(shiftSemitones) <= (link.maxShiftSemitones ?? 12)) return voice;
-    fallback = voice;
+    const leash = Math.min(link.maxShiftSemitones ?? MAX_SHIFT_SEMITONES, MAX_SHIFT_SEMITONES);
+    if (Math.abs(shiftSemitones) <= leash) return voice;
+    if (fallback === null || Math.abs(shiftSemitones) < Math.abs(fallback.shiftSemitones)) {
+      fallback = voice;
+    }
   }
   if (!fallback) throw new Error(`lens "${lensId}" role "${role}": no usable instrument`);
   return fallback;

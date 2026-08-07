@@ -1,8 +1,8 @@
-# Cosmophony
+# Stellune
 
 **The real sky above a place and date, turned into calm ambient sound.**
 
-Enter a birthday and a city; Cosmophony works out which stars were actually above
+Enter a birthday and a city; Stellune works out which stars were actually above
 that horizon at that moment and plays them as a slow, consonant drone you can
 leave running. The structure is true — real stars, real positions, real
 brightness. The timbre, the musical scale, and the timing are artistic choices.

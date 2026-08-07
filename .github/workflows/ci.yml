@@ -1,0 +1,57 @@
+# Tests and the mix law, on every push.
+#
+# Two jobs, deliberately separate. `test` is the build's correctness gate and
+# must be green. `mix-law` renders real audio and measures it against the
+# ratified numbers in `public/samples/lenses.json` — it is slower, it needs
+# ffmpeg, and it is the gate that has caught every mix defect this project has
+# had. Splitting them means a red mix law is legible as a mix problem rather
+# than as "CI is broken".
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Types and tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Unit tests
+        run: npm test
+      - name: Production build
+        run: npx vite build
+
+  mix-law:
+    name: The mix law, measured
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      # The renderer decodes the sample set and prints real audio; both need
+      # ffmpeg, which is not on the runner by default.
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: npm ci
+      - name: Measure and assert
+        run: npm run check:mix-law -- --json=mix-law.json
+      - name: Keep the measurements, pass or fail
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mix-law
+          path: mix-law.json
+          if-no-files-found: ignore

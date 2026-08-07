@@ -1,0 +1,16 @@
+{
+  "name": "Stellune — the real sky, as calm ambient sound",
+  "short_name": "Stellune",
+  "description": "The real stars above a place and date, turned into calm ambient music. A star sounds when it truly rises, culminates or sets. Runs entirely in your browser; nothing you enter is sent anywhere.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#05060a",
+  "theme_color": "#05060a",
+  "categories": ["music", "education", "lifestyle"],
+  "icons": [
+    { "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "apple-touch-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

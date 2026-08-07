@@ -246,8 +246,18 @@ describe('THE MASTERING LAW, as configured', () => {
   it('the config and the typed defaults state the same law', () => {
     const configured = masteringFor(lenses);
     expect(configured.lufsTargets.birthSky).toBe(-18);
-    expect(configured.limiter.maxEngagedFraction).toBe(0);
     expect(configured.figurationGlue.maxReductionDb).toBeLessThanOrEqual(2);
+  });
+
+  it('states the RATIFIED limiter amendment, not the original 0%', () => {
+    // 2026-08-10. Transient limiting is permitted — that is what limiters are
+    // for — but the sustained bed is protected absolutely, and that protection
+    // is structural: ground and chord are named here and given no limiter at
+    // all, rather than being given one and asked to leave it alone.
+    const { limiter } = masteringFor(lenses);
+    expect(limiter.maxEngagedFraction).toBe(0.01);
+    expect(limiter.maxReductionDb).toBe(3);
+    expect(limiter.zeroEngagementStems).toEqual(['ground', 'chord']);
   });
 
   it('carves the pads and lifts the moving parts, in every lens', () => {

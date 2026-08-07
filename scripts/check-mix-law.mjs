@@ -39,8 +39,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { render, steadyStateWindow, measureStem } from './render-score.mjs';
+import { render, steadyStateWindow, measureStem, withRegisterHints } from './render-score.mjs';
 import { integratedLufs } from './lib/mastering.mjs';
+import { buildSchedule, MAX_SHIFT_SEMITONES } from './lib/schedule.mjs';
 import { dbToGain } from './lib/audio.mjs';
 import {
   STEM_TARGETS_DBFS,
@@ -68,6 +69,7 @@ const args = Object.fromEntries(
 const scorePath = args.score ?? 'docs/a3-score.json';
 const section = args.section ?? 'birth';
 
+let sampleManifest = null;
 const failures = [];
 const notes = [];
 const ok = (cond, label, detail) => {
@@ -333,16 +335,51 @@ async function checkLens(lensId, score, lensConfig) {
     );
   }
 
-  // ── 9. the limiter must be doing nothing ────────────────────────────────
+  // ── 9. THE RATIFIED LIMITER AMENDMENT (2026-08-10) ──────────────────────
+  // Transient limiting is permitted; squashing is not; and the sustained bed is
+  // protected absolutely. The bed's zero is structural — ground and chord have
+  // no limiter — so this asserts the structure held, which would catch someone
+  // putting one back on the master.
   const limiterLaw = lensConfig.mastering?.limiter;
   if (limiterLaw) {
-    ok(
-      full.limiterBusyFraction <= limiterLaw.maxEngagedFraction + limiterLaw.toleranceFraction,
-      `limiter engagement ${(full.limiterBusyFraction * 100).toFixed(3)}%`,
-      `(law: ${(limiterLaw.maxEngagedFraction * 100).toFixed(0)}%, tolerance ` +
-        `${(limiterLaw.toleranceFraction * 100).toFixed(1)}%)`,
-    );
+    console.log('  limiter (transient-only, per stem):');
+    for (const role of ROLES) {
+      const measured = full.stemLimiting?.[role] ?? { worstDb: 0, engagedFraction: 0 };
+      const mustBeSilent = (limiterLaw.zeroEngagementStems ?? []).includes(role);
+      if (mustBeSilent) {
+        ok(
+          measured.worstDb === 0 && measured.engagedFraction === 0,
+          `${role.padEnd(11)} ZERO gain reduction (the bed is never limited)`,
+          `(measured ${measured.worstDb.toFixed(2)} dB)`,
+        );
+      } else {
+        ok(
+          measured.worstDb <= limiterLaw.maxReductionDb + 0.01 &&
+            measured.engagedFraction <= limiterLaw.maxEngagedFraction,
+          `${role.padEnd(11)} worst ${measured.worstDb.toFixed(2)} dB, engaged ` +
+            `${(measured.engagedFraction * 100).toFixed(3)}%`,
+          `(max ${limiterLaw.maxReductionDb} dB / ` +
+            `${(limiterLaw.maxEngagedFraction * 100).toFixed(0)}%)`,
+        );
+      }
+    }
   }
+
+  // ── 10. THE SHIFT CAP (Slice B1.1) ──────────────────────────────────────
+  // The confirmed mechanism behind the live-capture artefacts. Asserted on the
+  // schedule rather than on the audio, because it is a property of the voicing
+  // decision and an audio measurement would only find it once it was audible.
+  const schedule = buildSchedule(withRegisterHints(events), lensConfig, sampleManifest, lensId);
+  const far = schedule.filter((v) => Math.abs(v.midi - v.sampleMidi) > MAX_SHIFT_SEMITONES);
+  ok(
+    far.length === 0,
+    `every note is voiced within ±${MAX_SHIFT_SEMITONES} semitones of a recorded sample`,
+    far.length === 0
+      ? `(${schedule.length} notes)`
+      : `(${far.length} of ${schedule.length} exceed it, worst ` +
+        `${Math.max(...far.map((v) => Math.abs(v.midi - v.sampleMidi)))} st on ` +
+        `${far[0].instrument})`,
+  );
 
   // What the lens actually reached for — a fallback voicing is not a failure,
   // but it should be visible (a two-note handpan cannot cover four octaves).
@@ -372,6 +409,8 @@ async function checkLens(lensId, score, lensConfig) {
     figurationOverChord: overChord,
     figurationOverCombinedBed: s.figuration - bed,
     motionBandDb: full.motionBandDb,
+    stemLimiting: full.stemLimiting,
+    farShifts: far.length,
     motionLeadDb: full.motionLeadDb,
     glueDb: full.glueDb,
     lufs: measuredLufs,
@@ -384,6 +423,9 @@ async function main() {
   const score = JSON.parse(fs.readFileSync(path.resolve(ROOT, scorePath), 'utf8'));
   const lensConfig = JSON.parse(
     fs.readFileSync(path.join(ROOT, 'public', 'samples', 'lenses.json'), 'utf8'),
+  );
+  sampleManifest = JSON.parse(
+    fs.readFileSync(path.join(ROOT, 'public', 'samples', 'manifest.json'), 'utf8'),
   );
   const lenses = args.lens ? [args.lens] : Object.keys(lensConfig.lenses);
 

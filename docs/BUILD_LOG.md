@@ -1546,3 +1546,138 @@ seam is one call in the app layer, which a parallel stream owns. Not touched her
 
 **NEXT:** Shambu's ear on the two clips, and a ruling on the LUFS/peak conflict.
 HALT.
+
+**◇ REVIEW GATE — Atlas HQ · 2026-08-10 · B1 + Phase 4 ENGINEERING PASSED; two
+rulings.** B1's rigor endorsed: 385 tests green, five real mix defects found and
+fixed (shared-reverb bus, lying meters, digit-for-digit SEND_LEVELS), live⇄
+offline parity within ~1 dB across two different resamplers and reverbs,
+limiter at 0.00007 dB on the live path, and — especially — the refusal to tune
+ratified numbers to make its own change pass. That refusal is the culture this
+project runs on. **RULING 1 (HQ):** the sonata −5.01 vs ±5.00 window bound is
+measurement noise against a bound derived from an observed ~4.3 dB spread;
+WINDOW_TOLERANCE_DB widens to ±5.5 — the chord carve (which serves the ratified
+EQ lanes) stands untouched. **RULING 2 (proposed to Shambu, amends his own 0%
+instruction):** the LUFS/peak conflict is real — figuration crest ~29 dB means
+peak-guarding alone leaves lenses up to 8.9 dB under the −18 LUFS target. HQ's
+read: the 0%-limiter law was written to protect the SUSTAINED bed's breathing,
+not to forbid transient control — that is what limiters are for. Proposed
+amendment: transient-only limiting permitted (≤3 dB gain reduction, engaged
+≤1% of samples, and ZERO engagement asserted on ground+chord stems), target
+−18 LUFS ±1; any residual shortfall still reported per lens. Also: the ground
+lens's 525 kalimba fallthroughs at +10 dBFS peak flag a fallback-chain quality
+issue for the tuning pass. Phase 4's remaining audioStyleForLens synth seam →
+one-call fix, queued with CI/deploy. Shambu's ear gate: the two b1 clips
+(noise diagnosis A/B) + live app test.
+
+---
+
+## 2026-08-10 — Slice B1.1: the live artefacts diagnosed, and the name
+
+**THE HYPOTHESIS WAS WRONG, AND THE LOG SAYS SO.** HQ's read was a lazy-load
+race: notes voiced through a fall-through instrument or a distant pitch-shift
+while their proper samples were still downloading. The live graph was
+instrumented for exactly that (`liveDiagnostics.ts` — every fall-through, every
+shift beyond ±3, every unloaded sample, every voice steal, every instrument
+arrival, all with piece timestamps) and the B1 capture reproduced note for note.
+**Not one note was dropped for an unloaded sample**, across two full 220-second
+runs including the lens change; every tier of both lenses was ready at t=0.0 and
+t=69.2. The original capture came from this same localhost harness, so no sample
+was ever late there either. The limiter was not it either — worst gain reduction
+over the whole run, **0.072 dB**. Full report and raw log:
+`docs/B11_CORRELATION.md`, `docs/b11-live-diagnostics.json`.
+
+**WHAT IT ACTUALLY IS.** The far shifts were not scattered; they were the same
+handful of structural cases repeating — `weather/wine-glass −6` seven times,
+`chord/strings-violin +4/+5` thirteen times, `lead/wine-glass +4/+5` three times.
+Permanent properties of the lens config, not races: `wine-glass` has four samples
+across midi 63–74 and the score asks it for weather six semitones below. **And
+the two paths resample differently** — the offline sampler uses 4-point Hermite
+interpolation, the live path uses `ToneBufferSource.playbackRate`, which is the
+browser's linear interpolation. At ±1–2 semitones they are indistinguishable; at
++5 the linear one images badly, bright and sharp. *That* is why the same score is
+clean offline and defective live. Two of Shambu's three windows correlate with far
+shifts. **The first (clip 13–18 s) correlates with nothing at all, and I have not
+explained it** — the next thing to measure is `MediaRecorder` itself, since a
+burst of distortion can live in the recording rather than the playback.
+
+**THE FIX, IN THE PLACE THAT KEEPS THE INVARIANT.** A ±3 semitone cap in the
+shared schedule, so both paths obey it. A **lens-independent** playable range
+(midi 24–96) applied *before* any instrument is chosen, so pitches fold by whole
+octaves, pitch class survives, and every lens folds identically — folding per
+instrument was tried first and is wrong, because each lens has a different
+ceiling and the same event would sound an octave apart in two lenses, breaking
+"a lens changes what a note sounds like, never which note it is". Then the real
+repair: **the fall-through chains simply stopped too low.** Figuration topped out
+at midi 71–84 while the score reaches 90. Adding `glockenspiel` (67–96) to four
+lenses' chains, and to the fifth after `hand-bells` was tried and left a hole at
+72–81, took the residual from 608 over-cap notes to **0 of 3665, across all five
+lenses, with lens invariance still exact.** The post-fix live run logs **zero**
+far shifts where the pre-fix run logged nineteen.
+
+**THE OTHER THREE FIXES.** *(a)* `ready()` now awaits the fall-through tier as
+well as the primary, so no note can sound before its instrument exists, and the
+app shows a **"Tuning the sky"** veil while it waits — named for what it is,
+because "loading" invites "loading what?". *(b)* A lens swap fully preloads the
+target before it is armed; nothing is gained by starting a crossfade a second
+earlier and landing in a half-loaded lens. *(d)* Voices now `release(seconds)`
+rather than being disposed: stealing (at a 96-voice backstop) and stopping both
+fade over 120 ms, because a buffer source stopped at an arbitrary sample leaves a
+step, and a click in a piece like this is louder than anything in the score.
+
+**THE RATIFIED LIMITER AMENDMENT, IMPLEMENTED — AND IT WORKED.** Transient
+limiting moved **off the master and onto the stems that carry transients**, which
+is what makes the bed's zero engagement structural rather than asserted: ground
+and chord have no limiter to engage. Two bugs on the way. The look-ahead was
+written as `gain[i] = min(gain[i], gain[i+lookahead])`, which is a running
+minimum over the whole tail — one loud sample propagated its reduction back to
+the start of the buffer and pinned the limiter at maximum for **99.8%** of the
+render, which is not a limiter, it is a fader; replaced with a proper sliding-
+window minimum. And the 150 ms release meant the limiter was still recovering
+when the next chime landed, so it read as engaged a quarter of the time; 50 ms is
+inaudible on percussive material and makes the measurement mean what it says.
+**Result: all five lenses now land at −18.0/−18.1 LUFS.** The 8.9 dB spread that
+prompted the amendment is gone — and much of that came free from the shift cap,
+because a kalimba resampled +19 semitones *is* a 3× time-compressed transient.
+
+**WHAT STILL FAILS, AND I HAVE NOT TUNED IT.** Limiter engagement on the moving
+stems: aurora lead 0.92% ✓, embrace lead 1.94%, sonata lead 3.63%, pulse
+figuration 2.45% / lead 1.80%, ground figuration 8.65% / lead 1.16% — against the
+ratified **≤1%**. Everything else passes on every lens: stem targets, the arc
+(now ±5.5 by HQ ruling), hierarchy, unison guard, headroom, EQ lanes, glue,
+loudness, zero on the bed, and the shift cap. The 1% figure was proposed before
+anyone had measured struck figuration; ≤3 dB on 2–9% of samples is glue, not
+squash, and the bed is untouched. **Raising it is a ratification, so it is
+Shambu's, not mine.** Until then `npm run check:mix-law` — and the CI job that
+runs it — is red on that one assertion, honestly.
+
+**THE SEAM IS CLOSED.** `src/app/session.ts` now builds
+`createSampledStreamFromUrl` instead of the Phase 3.5 synth, and `setLens` hands
+straight to the player rather than tearing the engine down and rebuilding it —
+so a lens change no longer even pauses. `audioStyleForLens` is deleted.
+
+**CI/CD.** `.github/workflows/ci.yml` runs typecheck, 386 tests and a production
+build on every push, with the mix law as a separate job so a red mix reads as a
+mix problem rather than as "CI is broken". `.github/workflows/deploy.yml`
+publishes the Vite build to GitHub Pages on push to `main`, built with
+`--base=/Stellune/`. One defect found while writing it: the sampler fetched
+`/samples` **absolutely**, which 404s under a project path — the kind of thing
+that only appears after the deploy, on the URL you just sent a friend. There is
+now one `assetBase()` reading `import.meta.env.BASE_URL`.
+
+**THE NAME.** The product is **Stellune**. Title, meta description, no-script
+copy, `<h1>`, error prefixes, README heading, `package.json`, a new installable
+PWA manifest (relative `start_url`/`scope`, so it works at a domain root and
+under a project path alike), and a "Made with Stellune — your sky, as sound."
+line on the completion card. Historical BUILD_LOG entries keep the old name,
+because they are a record of what happened.
+
+**EVIDENCE.** 386 tests green, typecheck clean, production build clean.
+`docs/b11-live-aurora-to-embrace.mp3` — a NEW 150-second capture of the same
+segment from the live graph, aurora → embrace at ~41 s in, with the fixes in:
+**0 far shifts, 0 dropped notes, 0 voice steals, 0 dB on the bed limiters.**
+Correlation report in `docs/B11_CORRELATION.md`, measurements in
+`docs/b11-mix-law.json`.
+
+**NEXT:** Shambu's re-listen on the new capture — especially whether window A
+(13–18 s) survives, since nothing in the log explains it — and a ruling on the
+limiter engagement bound. HALT.

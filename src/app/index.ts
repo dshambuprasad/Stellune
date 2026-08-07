@@ -56,7 +56,16 @@ import {
 import { EMPTY_GLOW, Starfield } from './starfield.ts';
 import { toRenderStars } from './starStyle.ts';
 
-type Screen = 'loading' | 'ready' | 'playing' | 'complete' | 'error';
+/**
+ * `tuning` is Slice B1.1's veil.
+ *
+ * The sampled player does not resolve until every instrument the lens needs is
+ * loaded, because the alternative — starting on time and voicing whatever has
+ * arrived — is how the B1 capture got notes that were not the instrument they
+ * claimed to be. A short honest wait beats a wrong note, and the screen says
+ * which one it is doing.
+ */
+type Screen = 'loading' | 'ready' | 'tuning' | 'playing' | 'complete' | 'error';
 
 interface AppState {
   screen: Screen;
@@ -88,7 +97,7 @@ export function mountApp(container: HTMLElement): void {
 
   const el = <T extends HTMLElement>(selector: string): T => {
     const found = container.querySelector<T>(selector);
-    if (!found) throw new Error(`Cosmophony: the shell is missing ${selector}`);
+    if (!found) throw new Error(`Stellune: the shell is missing ${selector}`);
     return found;
   };
 
@@ -241,6 +250,11 @@ export function mountApp(container: HTMLElement): void {
         session.plan.weather.visibleCount,
       );
       compressionLine.textContent = timeCompressionLine(session.kappa);
+    } else if (state.screen === 'tuning') {
+      // Named for what it is. "Loading" invites the question "loading what?";
+      // this says the sky is being tuned, which is both true and calm.
+      statusLine.textContent = 'Tuning the sky';
+      compressionLine.textContent = '';
     } else if (state.screen === 'loading') {
       statusLine.textContent = 'Finding tonight’s sky…';
       compressionLine.textContent = '';
@@ -310,6 +324,8 @@ export function mountApp(container: HTMLElement): void {
     revealStart = performance.now();
     starfield.setReveal(0);
 
+    state.screen = 'tuning';
+    render();
     try {
       await session.play(0);
       state.screen = 'playing';
@@ -336,7 +352,10 @@ export function mountApp(container: HTMLElement): void {
     if (session.playing) {
       session.pause();
     } else {
+      state.screen = 'tuning';
+      render();
       await session.play();
+      state.screen = 'playing';
     }
     render();
   };
@@ -558,7 +577,7 @@ export function mountApp(container: HTMLElement): void {
     render();
 
     const problems = await verifyLensCatalogue();
-    if (problems.length > 0) console.warn('Cosmophony lens catalogue:', problems);
+    if (problems.length > 0) console.warn('Stellune lens catalogue:', problems);
   };
 
   void boot();
@@ -623,7 +642,7 @@ const SHELL_HTML = `
   <canvas id="sky" aria-label="The real sky above you, drawn as points of light"></canvas>
 
   <header class="topbar">
-    <h1>Cosmophony</h1>
+    <h1>Stellune</h1>
     <p class="status" id="status-line"></p>
   </header>
 
@@ -635,6 +654,7 @@ const SHELL_HTML = `
       <button type="button" id="replay" class="ghost">Play it again</button>
       <button type="button" id="go-endless" class="ghost">Stay with tonight</button>
     </div>
+    <p class="made-with">Made with Stellune — your sky, as sound.</p>
   </section>
 
   <div class="panel" id="panel">

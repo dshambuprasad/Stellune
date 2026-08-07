@@ -66,6 +66,11 @@
           {
             "instrument": "strings-cello",
             "maxShiftSemitones": 12
+          },
+          {
+            "instrument": "flute",
+            "maxShiftSemitones": 3,
+            "_why": "high-register cover: B1.1 measured the chain topping out below the register the score reaches, which forced resampling far past the +/-3 cap"
           }
         ],
         "figuration": [
@@ -86,6 +91,11 @@
           {
             "instrument": "hand-chimes",
             "maxShiftSemitones": 12
+          },
+          {
+            "instrument": "glockenspiel",
+            "maxShiftSemitones": 3,
+            "_why": "high-register cover: B1.1 measured the chain topping out below the register the score reaches, which forced resampling far past the +/-3 cap"
           }
         ],
         "weather": [
@@ -177,6 +187,11 @@
           {
             "instrument": "strings-violin",
             "maxShiftSemitones": 12
+          },
+          {
+            "instrument": "piano-felt",
+            "maxShiftSemitones": 3,
+            "_why": "high-register cover: B1.1 measured the chain topping out below the register the score reaches, which forced resampling far past the +/-3 cap"
           }
         ],
         "figuration": [
@@ -187,6 +202,11 @@
           {
             "instrument": "kalimba",
             "maxShiftSemitones": 12
+          },
+          {
+            "instrument": "glockenspiel",
+            "maxShiftSemitones": 3,
+            "_why": "high-register cover: B1.1 measured the chain topping out below the register the score reaches, which forced resampling far past the +/-3 cap"
           }
         ],
         "lead": [
@@ -197,6 +217,11 @@
           {
             "instrument": "vibraphone-soft",
             "maxShiftSemitones": 12
+          },
+          {
+            "instrument": "glockenspiel",
+            "maxShiftSemitones": 3,
+            "_why": "high-register cover: B1.1 measured the chain topping out below the register the score reaches, which forced resampling far past the +/-3 cap"
           }
         ],
         "weather": [
@@ -292,6 +317,11 @@
           {
             "instrument": "strings-violin",
             "maxShiftSemitones": 12
+          },
+          {
+            "instrument": "flute",
+            "maxShiftSemitones": 3,
+            "_why": "high-register cover: B1.1 measured the chain topping out below the register the score reaches, which forced resampling far past the +/-3 cap"
           }
         ],
         "figuration": [
@@ -302,6 +332,11 @@
           {
             "instrument": "vibraphone-soft",
             "maxShiftSemitones": 12
+          },
+          {
+            "instrument": "glockenspiel",
+            "maxShiftSemitones": 3,
+            "_why": "high-register cover: B1.1 measured the chain topping out below the register the score reaches, which forced resampling far past the +/-3 cap"
           }
         ],
         "lead": [
@@ -312,6 +347,11 @@
           {
             "instrument": "piano-felt",
             "maxShiftSemitones": 12
+          },
+          {
+            "instrument": "glockenspiel",
+            "maxShiftSemitones": 3,
+            "_why": "high-register cover: B1.1 measured the chain topping out below the register the score reaches, which forced resampling far past the +/-3 cap"
           }
         ],
         "weather": [
@@ -403,6 +443,11 @@
           {
             "instrument": "wine-glass",
             "maxShiftSemitones": 12
+          },
+          {
+            "instrument": "flute",
+            "maxShiftSemitones": 3,
+            "_why": "high-register cover: B1.1 measured the chain topping out below the register the score reaches, which forced resampling far past the +/-3 cap"
           }
         ],
         "figuration": [
@@ -413,6 +458,11 @@
           {
             "instrument": "kalimba",
             "maxShiftSemitones": 12
+          },
+          {
+            "instrument": "glockenspiel",
+            "maxShiftSemitones": 3,
+            "_why": "high-register cover: B1.1 measured the chain topping out below the register the score reaches, which forced resampling far past the +/-3 cap"
           }
         ],
         "lead": [
@@ -518,6 +568,11 @@
           {
             "instrument": "strings-cello",
             "maxShiftSemitones": 12
+          },
+          {
+            "instrument": "flute",
+            "maxShiftSemitones": 3,
+            "_why": "high-register cover: B1.1 measured the chain topping out below the register the score reaches, which forced resampling far past the +/-3 cap"
           }
         ],
         "figuration": [
@@ -532,6 +587,11 @@
           {
             "instrument": "kalimba",
             "maxShiftSemitones": 12
+          },
+          {
+            "instrument": "glockenspiel",
+            "maxShiftSemitones": 3,
+            "_why": "high-register cover. hand-bells was tried first and leaves a hole at midi 72-81 (it is recorded 82-95); glockenspiel spans 67-96 with no gap wider than 7, which is what the +/-3 cap needs. Still a bell, which is what this lens is made of."
           }
         ],
         "lead": [
@@ -647,9 +707,29 @@
       "tolerance": 1
     },
     "limiter": {
-      "ceilingDbfs": -1,
-      "maxEngagedFraction": 0,
-      "toleranceFraction": 0.002
+      "ceilingDbfs": -1.0,
+      "maxEngagedFraction": 0.01,
+      "_doc": [
+        "RATIFIED AMENDMENT, 2026-08-10. The original law said the limiter must never",
+        "engage at all. Measured, that rule and the -18 LUFS target could not both be",
+        "met: figuration's crest factor after RMS matching is about 29 dB, so peak-",
+        "guarding alone left lenses up to 8.9 dB under target — an 8 dB spread between",
+        "lenses, which is exactly what normalising to loudness was introduced to",
+        "remove.",
+        "",
+        "HQ's read, ratified by Shambu: the 0% rule was written to protect the",
+        "SUSTAINED bed's breathing, not to forbid transient control — which is what",
+        "limiters are for. So limiting is now permitted on transients only, and the",
+        "protection it was written for is asserted directly instead of by proxy:",
+        "ZERO gain reduction on the ground and chord stems, structurally, because the",
+        "limiters live on the figuration and lead stems and the bed has none."
+      ],
+      "maxReductionDb": 3.0,
+      "engagementThresholdDb": 0.1,
+      "zeroEngagementStems": [
+        "ground",
+        "chord"
+      ]
     },
     "figurationGlue": {
       "_doc": [

@@ -211,6 +211,80 @@ export function glueCompress([left, right], sampleRate, config) {
   return worstDb;
 }
 
+/**
+ * Transient limiting, per stem — THE RATIFIED AMENDMENT (2026-08-10).
+ *
+ * The original law forbade the limiter from engaging at all. Measured, that and
+ * the −18 LUFS target could not both be met: figuration's crest factor after
+ * RMS matching is about 29 dB, so peak-guarding alone left lenses up to 8.9 dB
+ * under target. HQ's read, ratified by Shambu: the 0% rule was written to
+ * protect the SUSTAINED bed's breathing, not to forbid transient control.
+ *
+ * So the limiter moved off the master and onto the stems that actually carry
+ * transients. The bed's zero engagement is then structural rather than
+ * asserted-and-hoped: ground and chord have no limiter to engage.
+ *
+ * Look-ahead, because a limiter that reacts after the peak has passed is a
+ * distortion unit. Returns what it did, so the ≤3 dB and ≤1% bounds are checked
+ * against measurement and not against settings.
+ */
+export function limitTransients([left, right], sampleRate, config) {
+  const ceiling = 10 ** (config.ceilingDbfs / 20);
+  const maxReduction = 10 ** (-(config.maxReductionDb ?? 3) / 20);
+  const lookahead = Math.max(1, Math.round(0.005 * sampleRate));
+  // 50 ms, not 150. On struck figuration a 150 ms release means the limiter is
+  // still recovering when the next chime lands, so it reads as "engaged" a
+  // quarter of the time while actually reducing on only a fraction of that —
+  // and the law's ≤1% is a statement about how often it WORKS, not about how
+  // long it takes to let go. 50 ms is still slow enough to be inaudible on
+  // percussive material and fast enough that the measurement means what it says.
+  const release = Math.exp(-1 / ((config.releaseSeconds ?? 0.05) * sampleRate));
+
+  // The gain each sample needs, on its own.
+  const need = new Float32Array(left.length).fill(1);
+  for (let i = 0; i < left.length; i++) {
+    const peak = Math.max(Math.abs(left[i]), Math.abs(right[i]));
+    if (peak > ceiling) need[i] = Math.max(maxReduction, ceiling / peak);
+  }
+
+  // The minimum over the NEXT `lookahead` samples, so the gain is already down
+  // when the transient arrives.
+  //
+  // A sliding-window minimum, via a monotonic deque. The obvious loop —
+  // "gain[i] = min(gain[i], gain[i + lookahead])" — was written first and is
+  // wrong: each step reads a value that has already absorbed the one beyond it,
+  // so a single loud sample propagates its gain all the way back to the start
+  // of the buffer. Measured, that pinned the limiter at its maximum reduction
+  // for 99.8% of the render, which is not a limiter, it is a fader.
+  const window = new Float32Array(left.length);
+  const deque = new Int32Array(left.length);
+  let head = 0;
+  let tail = 0;
+  for (let i = 0; i < left.length; i++) {
+    const bound = Math.min(left.length - 1, i + lookahead);
+    // Extend the window to cover [i, i+lookahead].
+    for (let k = i === 0 ? 0 : Math.min(left.length - 1, i - 1 + lookahead + 1); k <= bound; k++) {
+      while (tail > head && need[deque[tail - 1]] >= need[k]) tail--;
+      deque[tail++] = k;
+    }
+    while (deque[head] < i) head++;
+    window[i] = need[deque[head]];
+  }
+  let smoothed = 1;
+  let worstDb = 0;
+  let engaged = 0;
+  for (let i = 0; i < left.length; i++) {
+    const wanted = window[i];
+    smoothed = wanted < smoothed ? wanted : wanted + (smoothed - wanted) * release;
+    left[i] *= smoothed;
+    right[i] *= smoothed;
+    const db = -20 * Math.log10(smoothed);
+    if (db > worstDb) worstDb = db;
+    if (db > (config.engagementThresholdDb ?? 0.1)) engaged++;
+  }
+  return { worstDb, engagedFraction: engaged / Math.max(1, left.length) };
+}
+
 // ---------------------------------------------------------------------------
 // Integrated loudness — ITU-R BS.1770-4
 // ---------------------------------------------------------------------------

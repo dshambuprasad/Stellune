@@ -25,6 +25,7 @@
 
 import { ROLE_SHAPING, STEM_TARGETS_DBFS, STEM_TOLERANCE_DB } from '../../../scripts/lib/mixlaw.mjs';
 import type { VoiceRole } from '../mapping/index.ts';
+import { samplesBase } from './assetBase.ts';
 
 export { ROLE_SHAPING, STEM_TARGETS_DBFS, STEM_TOLERANCE_DB };
 export type { MasteringConfig, EqLane } from './samplerLenses.ts';
@@ -112,7 +113,7 @@ export function isCalibrated(calibration: MixCalibration, lensId: string): boole
  * A missing calibration should not stop the music. It should make the mix
  * approximate and say so — which is what `isCalibrated` is for.
  */
-export async function loadCalibration(baseUrl = '/samples'): Promise<MixCalibration> {
+export async function loadCalibration(baseUrl = samplesBase()): Promise<MixCalibration> {
   try {
     const response = await fetch(`${baseUrl}/calibration.json`);
     if (!response.ok) return DEFAULT_CALIBRATION;

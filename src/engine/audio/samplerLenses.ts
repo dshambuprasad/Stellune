@@ -18,6 +18,7 @@
  * asserts it across all five lenses on every run.
  */
 
+import { chooseVoiceFor } from '../../../scripts/lib/schedule.mjs';
 import type { TimbreParams, VoiceRole } from '../mapping/index.ts';
 
 /** One instrument in a role's fall-through chain. */
@@ -90,7 +91,24 @@ export interface LensDefinition {
  */
 export interface MasteringConfig {
   lufsTargets: { birthSky: number; tonight: number; tolerance: number };
-  limiter: { ceilingDbfs: number; maxEngagedFraction: number; toleranceFraction: number };
+  limiter: {
+    ceilingDbfs: number;
+    /** Fraction of samples the limiter may be engaged for. */
+    maxEngagedFraction: number;
+    /** Hard cap on gain reduction, in dB. */
+    maxReductionDb: number;
+    /** Reduction above this counts as "engaged". */
+    engagementThresholdDb: number;
+    /**
+     * Stems that get NO limiter, so their zero engagement is structural.
+     *
+     * The ratified amendment permits transient limiting but requires zero gain
+     * reduction on the sustained bed. A limiter on the master would reduce
+     * every stem at once, so the bed's protection is achieved by not giving it
+     * a limiter rather than by asserting one stayed idle.
+     */
+    zeroEngagementStems: string[];
+  };
   figurationGlue: {
     thresholdDb: number;
     ratio: number;
@@ -240,36 +258,33 @@ export function chooseVoice(
   role: VoiceRole,
   midi: number,
 ): ChosenVoice {
-  const lens = config.lenses[lensId];
-  if (!lens) {
-    throw new Error(`unknown lens "${lensId}" — have ${Object.keys(config.lenses).join(', ')}`);
+  // DELEGATED, not reimplemented. This used to be a second copy of the walk,
+  // and on 2026-08-10 the two drifted the moment Slice B1.1 added the ±3 shift
+  // cap to one of them — `test/schedule.test.ts` caught it on the first run,
+  // which is exactly what that test is for. The typed surface below is what the
+  // bank wants (the manifest entries, not just their ids); the DECISION comes
+  // from the one place that makes it.
+  const chosen = chooseVoiceFor(config, manifest, lensId, role, midi) as {
+    instrument: string;
+    sampleMidi: number;
+    shiftSemitones: number;
+    rate: number;
+    gainDb: number;
+  };
+  const entry = manifest.instruments[chosen.instrument];
+  if (!entry) throw new Error(`schedule chose an instrument the manifest lacks: ${chosen.instrument}`);
+  const sample = entry.samples.find((s) => s.midi === chosen.sampleMidi);
+  if (!sample) {
+    throw new Error(`schedule chose a sample the manifest lacks: ${chosen.instrument}/${chosen.sampleMidi}`);
   }
-  const chain = lens.roles[role];
-  if (!chain || chain.length === 0) throw new Error(`lens "${lensId}" has no role "${role}"`);
-
-  let fallback: ChosenVoice | null = null;
-  for (const link of chain) {
-    const entry = manifest.instruments[link.instrument];
-    if (!entry || entry.samples.length === 0) continue;
-
-    let best = entry.samples[0] as SampleEntry;
-    for (const sample of entry.samples) {
-      if (Math.abs(sample.midi - midi) < Math.abs(best.midi - midi)) best = sample;
-    }
-    const shiftSemitones = midi - best.midi;
-    const voice: ChosenVoice = {
-      instrument: link.instrument,
-      entry,
-      sample: best,
-      shiftSemitones,
-      rate: 2 ** (shiftSemitones / 12),
-      gainDb: (link.gainDb ?? 0) + entry.levelDb,
-    };
-    if (Math.abs(shiftSemitones) <= (link.maxShiftSemitones ?? 12)) return voice;
-    fallback = voice;
-  }
-  if (!fallback) throw new Error(`lens "${lensId}" role "${role}": no usable instrument`);
-  return fallback;
+  return {
+    instrument: chosen.instrument,
+    entry,
+    sample,
+    shiftSemitones: chosen.shiftSemitones,
+    rate: chosen.rate,
+    gainDb: chosen.gainDb,
+  };
 }
 
 /**
@@ -317,7 +332,13 @@ export function instrumentsForLens(
  */
 export const MASTERING_DEFAULTS: MasteringConfig = {
   lufsTargets: { birthSky: -18, tonight: -18, tolerance: 1.0 },
-  limiter: { ceilingDbfs: -1.0, maxEngagedFraction: 0.0, toleranceFraction: 0.002 },
+  limiter: {
+    ceilingDbfs: -1.0,
+    maxEngagedFraction: 0.01,
+    maxReductionDb: 3.0,
+    engagementThresholdDb: 0.1,
+    zeroEngagementStems: ['ground', 'chord'],
+  },
   figurationGlue: {
     thresholdDb: -16,
     ratio: 2.0,

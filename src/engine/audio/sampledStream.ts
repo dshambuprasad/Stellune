@@ -38,6 +38,7 @@ import * as Tone from 'tone';
 
 import type { MusicalEvent, ScoreWindow, SessionPlan, VoiceRole } from '../mapping/index.ts';
 import { renderWindow } from '../mapping/index.ts';
+import { samplesBase } from './assetBase.ts';
 import {
   buildSchedule,
   concurrencyGains,
@@ -55,6 +56,11 @@ import {
   type SampleManifest,
 } from './samplerLenses.ts';
 import {
+  FAR_SHIFT_SEMITONES,
+  LiveDiagnostics,
+  type LiveEvent,
+} from './liveDiagnostics.ts';
+import {
   DEFAULT_CALIBRATION,
   MASTER,
   ROLE_SHAPING,
@@ -65,6 +71,13 @@ import {
 } from './mixLaw.ts';
 
 const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
+
+/** Chrome's `AudioRenderCapacityEvent`, typed here because lib.dom lacks it. */
+interface RenderCapacityEventLike {
+  averageLoad: number;
+  peakLoad: number;
+  underrunRatio: number;
+}
 
 /** The score's own amplitude arc, read at an event-relative moment. */
 function amplitudeAt(
@@ -106,6 +119,25 @@ const TILT_EPSILON_DB = 0.5;
 const TWINKLE_MIN = 0.15;
 const TWINKLE_MIN_SECONDS = 3;
 /**
+ * How many voices may sound at once before the oldest are retired early.
+ *
+ * A full sky at the bloom is the densest the piece ever gets; this sits above
+ * it, so the cap is a backstop against a pathological session rather than a
+ * limit on the composition. Reached, it steals the OLDEST voices, because the
+ * newest are the ones the ear is currently following.
+ */
+const MAX_VOICES = 96;
+/**
+ * How long a stolen voice takes to fade.
+ *
+ * Not zero, ever. A buffer source stopped at an arbitrary sample leaves a step
+ * discontinuity, which is a click — and a click in a piece like this is louder
+ * than anything in the score. 120 ms is under the threshold at which the ear
+ * hears the fade as a separate event and far above the threshold at which a cut
+ * becomes a click.
+ */
+const STEAL_FADE_SECONDS = 0.12;
+/**
  * How much the level meters smooth.
  *
  * Was 0.9, which read a continuous drone accurately and a bursty role about
@@ -125,6 +157,12 @@ export interface SampledStreamOptions {
   onProgress?: (loaded: number, total: number) => void;
   /** Notified when a note is dropped because its instrument had not loaded. */
   onDropped?: (role: VoiceRole, instrument: string) => void;
+  /**
+   * Record every fall-through voicing, far pitch-shift, unloaded sample and
+   * voice steal, with piece timestamps. Off by default: it costs an object per
+   * suspicious note, which is nothing next to a sampler but is not free either.
+   */
+  diagnostics?: boolean;
 }
 
 /** One role's signal path, from bus to master. */
@@ -142,6 +180,8 @@ interface RoleChain {
   rumbleGuard: Tone.Filter;
   glue: Tone.Compressor | null;
   trim: Tone.Gain;
+  /** Transient limiter. Null on the bed, by law — see `#buildRoleChain`. */
+  limiter: Tone.Limiter | null;
   meter: Tone.Meter;
 }
 
@@ -152,6 +192,8 @@ interface LiveVoice {
   scheduledLevel: number;
   startsAt: number;
   endsAt: number;
+  /** Ramp this voice to silence over `seconds`, then free it. Never a cut. */
+  release(seconds: number): void;
   dispose(): void;
 }
 
@@ -177,6 +219,19 @@ export interface SampledStream {
   getStemLevels(): Record<string, number>;
   /** The schedule this engine would play for a span — the parity surface. */
   scheduleFor(fromSeconds: number, toSeconds: number, lensId?: string): ScheduledVoice[];
+  /**
+   * Record the live master to a Blob.
+   *
+   * Every ear gate this project has needs a clip of the LIVE path, not just the
+   * renderer's, because they are different code and B1 proved they can differ
+   * audibly. Doing it here rather than in the harness is what keeps Tone out of
+   * layers that may not import it — `test/boundaries.test.ts` caught exactly
+   * that when the capture was first written upstairs.
+   */
+  captureStart(): void;
+  captureStop(): Promise<Blob>;
+  /** What the graph actually did, for correlating against an ear report. */
+  readonly diagnostics: LiveDiagnostics;
 }
 
 class ToneSampledStream implements SampledStream {
@@ -187,6 +242,7 @@ class ToneSampledStream implements SampledStream {
   readonly #mastering: MasteringConfig;
   readonly #calibration: MixCalibration;
   readonly #onDropped: ((role: VoiceRole, instrument: string) => void) | undefined;
+  readonly #log: LiveDiagnostics;
 
   #lens: string;
   #pendingLens: string | null = null;
@@ -201,8 +257,10 @@ class ToneSampledStream implements SampledStream {
 
   readonly #roles = new Map<VoiceRole, RoleChain>();
   #master: Tone.Gain | null = null;
-  #limiter: Tone.Limiter | null = null;
   #masterMeter: Tone.Meter | null = null;
+  #renderCapacity: { stop(): void } | null = null;
+  #recorder: MediaRecorder | null = null;
+  #captureChunks: Blob[] = [];
 
   #voices: LiveVoice[] = [];
   #levels = new Float32Array(0);
@@ -222,6 +280,7 @@ class ToneSampledStream implements SampledStream {
     this.#mastering = masteringFor(lenses);
     this.#calibration = options.calibration ?? DEFAULT_CALIBRATION;
     this.#onDropped = options.onDropped;
+    this.#log = new LiveDiagnostics(options.diagnostics ?? false);
     this.#lens =
       options.lensId ??
       (plan.config.mode === 'birth-sky'
@@ -231,6 +290,9 @@ class ToneSampledStream implements SampledStream {
     const bankOptions: ConstructorParameters<typeof SamplerBank>[2] = {};
     if (options.baseUrl !== undefined) bankOptions.baseUrl = options.baseUrl;
     if (options.onProgress !== undefined) bankOptions.onProgress = options.onProgress;
+    bankOptions.onInstrumentReady = (instrument, tier) => {
+      this.#note({ kind: 'instrument-ready', instrument, detail: tier });
+    };
     this.#bank = new SamplerBank(manifest, lenses, bankOptions);
   }
 
@@ -250,19 +312,64 @@ class ToneSampledStream implements SampledStream {
     return isCalibrated(this.#calibration, this.#lens);
   }
 
+  get diagnostics(): LiveDiagnostics {
+    return this.#log;
+  }
+
+  captureStart(): void {
+    this.#assertLive();
+    const master = this.#master;
+    if (!master || this.#recorder) return;
+    const context = Tone.getContext().rawContext as unknown as AudioContext;
+    const destination = context.createMediaStreamDestination();
+    master.connect(destination);
+    const recorder = new MediaRecorder(destination.stream, {
+      mimeType: 'audio/webm;codecs=opus',
+      audioBitsPerSecond: 192000,
+    });
+    this.#captureChunks = [];
+    recorder.ondataavailable = (event) => this.#captureChunks.push(event.data);
+    recorder.start();
+    this.#recorder = recorder;
+  }
+
+  async captureStop(): Promise<Blob> {
+    const recorder = this.#recorder;
+    if (!recorder) return new Blob([], { type: 'audio/webm' });
+    await new Promise<void>((resolve) => {
+      recorder.onstop = () => resolve();
+      recorder.stop();
+    });
+    this.#recorder = null;
+    return new Blob(this.#captureChunks, { type: 'audio/webm' });
+  }
+
+  /** One log line, with the piece timestamp filled in from the clock. */
+  #note(event: Omit<LiveEvent, 'atPieceSeconds'> & { atPieceSeconds?: number }): void {
+    if (!this.#log.enabled) return;
+    this.#log.record({
+      ...event,
+      atPieceSeconds: event.atPieceSeconds ?? this.playheadSeconds(),
+    });
+  }
+
   // ----------------------------------------------------------------- graph
 
   #buildGraph(): void {
     if (this.#master) return;
 
-    const limiter = new Tone.Limiter(this.#mastering.limiter.ceilingDbfs).toDestination();
+    // NO MASTER LIMITER. The ratified amendment permits transient limiting but
+    // requires ZERO gain reduction on the ground and chord stems, and anything
+    // on the master reduces every stem at once. So the limiters live on the
+    // stems that carry transients and the bed simply has none — the bed's zero
+    // is a property of the graph, not a number to be checked afterwards.
     const masterMeter = new Tone.Meter({ normalRange: false, smoothing: METER_SMOOTHING });
-    const master = new Tone.Gain(1).connect(limiter);
+    const master = new Tone.Gain(1).toDestination();
     master.connect(masterMeter);
 
-    this.#limiter = limiter;
     this.#master = master;
     this.#masterMeter = masterMeter;
+    this.#watchRenderCapacity();
 
     for (const role of LENS_ROLES) this.#roles.set(role, this.#buildRoleChain(role, master));
     this.#applyLens();
@@ -283,7 +390,13 @@ class ToneSampledStream implements SampledStream {
    * survive.
    */
   #buildRoleChain(role: VoiceRole, master: Tone.Gain): RoleChain {
-    const trim = new Tone.Gain(1).connect(master);
+    const law = this.#mastering.limiter;
+    const bed = (law.zeroEngagementStems ?? []).includes(role);
+    // The bed gets no limiter at all; everything else gets one, set to the
+    // ratified ceiling. `Tone.Limiter` wraps a compressor with a zero knee and
+    // an effectively infinite ratio, which is what a transient limiter is.
+    const limiter = bed ? null : new Tone.Limiter(law.ceilingDbfs).connect(master);
+    const trim = new Tone.Gain(1).connect(limiter ?? master);
     const meter = new Tone.Meter({ normalRange: false, smoothing: METER_SMOOTHING });
     trim.connect(meter);
 
@@ -368,8 +481,49 @@ class ToneSampledStream implements SampledStream {
       rumbleGuard,
       glue,
       trim,
+      limiter,
       meter,
     };
+  }
+
+  /**
+   * Watch the audio thread's own load, where the browser will tell us.
+   *
+   * `AudioContext.renderCapacity` is Chrome-only and reports `underrunRatio` —
+   * the fraction of render quanta that missed their deadline. A quantum that
+   * misses produces a discontinuity in the output, which is heard as a click,
+   * a burst of distortion, or a note that seems to come from nowhere. Every
+   * other explanation for the B1 ear report was measured and found absent, so
+   * this one gets measured too instead of being assumed away.
+   */
+  #watchRenderCapacity(): void {
+    if (!this.#log.enabled) return;
+    const raw = Tone.getContext().rawContext as unknown as {
+      renderCapacity?: {
+        start(options?: { updateInterval?: number }): void;
+        stop(): void;
+        addEventListener(type: 'update', fn: (e: RenderCapacityEventLike) => void): void;
+      };
+    };
+    const capacity = raw.renderCapacity;
+    if (!capacity) return;
+
+    capacity.addEventListener('update', (event) => {
+      if (event.underrunRatio <= 0 && event.peakLoad < 0.9) return;
+      this.#note({
+        kind: 'audio-underrun',
+        averageLoad: Number(event.averageLoad.toFixed(3)),
+        peakLoad: Number(event.peakLoad.toFixed(3)),
+        underrunRatio: Number(event.underrunRatio.toFixed(4)),
+        voices: this.#voices.length,
+      });
+    });
+    try {
+      capacity.start({ updateInterval: 0.5 });
+      this.#renderCapacity = capacity;
+    } catch {
+      /* the browser has the property but not the permission to run it */
+    }
   }
 
   /** Point every role's filters and trims at the active lens. */
@@ -430,10 +584,21 @@ class ToneSampledStream implements SampledStream {
 
   // ------------------------------------------------------------ scheduling
 
+  /**
+   * Make the graph playable, and DO NOT RETURN UNTIL IT IS.
+   *
+   * The primary tier is one instrument per role — enough to voice any note in
+   * any register — and `play()` awaits this, so no note can sound before its
+   * instrument exists. The fall-through tier is awaited too: it is small, it
+   * arrives in a second or two on any connection that could load the app at
+   * all, and a brief veil is a better answer than a wrong note. The UI's job is
+   * to say what it is waiting for, not to hide the wait.
+   */
   async ready(): Promise<void> {
     this.#assertLive();
     this.#buildGraph();
-    await this.#bank.loadLens(this.#lens);
+    const { whenComplete } = await this.#bank.loadLens(this.#lens);
+    await whenComplete;
     // Each role's reverb generates its own impulse response; none of them may
     // still be doing that when the first note lands.
     await Promise.all([...this.#roles.values()].map((c) => c.reverb?.ready ?? Promise.resolve()));
@@ -455,6 +620,7 @@ class ToneSampledStream implements SampledStream {
     this.#scheduledTo = fromSeconds;
     this.#playing = true;
 
+    this.#note({ kind: 'playback-started', atPieceSeconds: fromSeconds, lens: this.#lens });
     this.#scheduleSpan(fromSeconds, fromSeconds + LOOKAHEAD_SECONDS, true);
 
     this.#ticker = setInterval(() => {
@@ -535,8 +701,32 @@ class ToneSampledStream implements SampledStream {
         this.#startVoice(voice, from - voice.startSeconds);
       }
     }
+    this.#stealIfCrowded();
     this.#automateConcurrency(schedule, from, to);
     this.#scheduledTo = Math.max(this.#scheduledTo, to);
+  }
+
+  /**
+   * Retire the oldest voices when the graph is carrying too many.
+   *
+   * Faded, never cut, and logged — a steal is a note the composition asked for
+   * and did not get, so it belongs in the diagnostics next to the dropped and
+   * far-shifted ones rather than happening quietly.
+   */
+  #stealIfCrowded(): void {
+    if (this.#voices.length <= MAX_VOICES) return;
+    const excess = this.#voices.length - MAX_VOICES;
+    const oldest = [...this.#voices].sort((a, b) => a.startsAt - b.startsAt).slice(0, excess);
+    for (const voice of oldest) {
+      voice.release(STEAL_FADE_SECONDS);
+      voice.endsAt = Math.min(voice.endsAt, Tone.now() + STEAL_FADE_SECONDS + 0.05);
+      this.#note({
+        kind: 'voice-steal',
+        role: voice.role,
+        sourceId: voice.sourceId,
+        voices: this.#voices.length,
+      });
+    }
   }
 
   /**
@@ -590,8 +780,46 @@ class ToneSampledStream implements SampledStream {
       // tier still arriving. Dropping the note beats blocking the scheduler on a
       // fetch or substituting a different pitch: silence is honest, a wrong note
       // is not.
+      this.#note({
+        kind: 'not-loaded',
+        atPieceSeconds: voice.startSeconds + intoNoteSeconds,
+        role,
+        sourceId: voice.sourceId,
+        instrument: voice.instrument,
+        midi: voice.midi,
+        sampleMidi: voice.sampleMidi,
+      });
       this.#onDropped?.(role, voice.instrument);
       return;
+    }
+
+    if (this.#log.enabled) {
+      const preferred = this.#lenses.lenses[this.#lens]?.roles[role]?.[0]?.instrument;
+      const at = voice.startSeconds + intoNoteSeconds;
+      if (preferred && preferred !== voice.instrument) {
+        this.#note({
+          kind: 'fallback-voicing',
+          atPieceSeconds: at,
+          role,
+          sourceId: voice.sourceId,
+          instrument: voice.instrument,
+          preferred,
+          midi: voice.midi,
+        });
+      }
+      const shift = voice.midi - voice.sampleMidi;
+      if (Math.abs(shift) > FAR_SHIFT_SEMITONES) {
+        this.#note({
+          kind: 'far-shift',
+          atPieceSeconds: at,
+          role,
+          sourceId: voice.sourceId,
+          instrument: voice.instrument,
+          midi: voice.midi,
+          sampleMidi: voice.sampleMidi,
+          shiftSemitones: shift,
+        });
+      }
     }
 
     const when = this.#origin + (voice.startSeconds + intoNoteSeconds - this.#sliceFrom);
@@ -667,6 +895,7 @@ class ToneSampledStream implements SampledStream {
     this.#automateLevel(gain.gain, voice, when, soundingSeconds, intoNoteSeconds);
     source.start(when, offsetSeconds, soundingSeconds);
 
+    let released = false;
     this.#voices.push({
       sourceId: voice.sourceId,
       role,
@@ -674,6 +903,22 @@ class ToneSampledStream implements SampledStream {
       startsAt: when,
       // Held a moment past the fade so disposal never truncates a tail.
       endsAt: when + soundingSeconds + 0.5,
+      release: (seconds) => {
+        if (released) return;
+        released = true;
+        const now = Tone.now();
+        // Cancel the arc and ramp from wherever the level actually is. Ramping
+        // from a value the param no longer holds is itself a step, which is the
+        // click this exists to avoid.
+        gain.gain.cancelScheduledValues(now);
+        gain.gain.setValueAtTime(gain.gain.value, now);
+        gain.gain.linearRampToValueAtTime(0, now + seconds);
+        try {
+          source.stop(now + seconds);
+        } catch {
+          /* already stopped */
+        }
+      },
       dispose: () => {
         twinkleLfo?.dispose();
         source.dispose();
@@ -753,9 +998,14 @@ class ToneSampledStream implements SampledStream {
     }
     if (lensId === this.#lens || lensId === this.#pendingLens) return;
 
-    // Loaded BEFORE it is armed, so the first window under the new lens never
-    // has to drop notes waiting on a download.
-    await this.#bank.loadLens(lensId);
+    this.#note({ kind: 'lens-requested', lens: lensId });
+    // FULLY loaded before it is armed — the fall-through tier too, not just the
+    // primary. B1 awaited only the primary and let the rest arrive in the
+    // background, which meant the first minute under a new lens could reach for
+    // an instrument that was still downloading. Nothing is gained by starting
+    // the crossfade a second earlier and landing in a half-loaded lens.
+    const { whenComplete } = await this.#bank.loadLens(lensId);
+    await whenComplete;
     if (this.#disposed) return;
     this.#pendingLens = lensId;
     if (!this.#playing) this.#commitLens();
@@ -766,6 +1016,7 @@ class ToneSampledStream implements SampledStream {
     this.#pendingLens = null;
     if (!next) return;
     this.#lens = next;
+    this.#note({ kind: 'lens-committed', lens: next });
 
     const master = this.#master;
     if (!master || !this.#playing) {
@@ -836,11 +1087,17 @@ class ToneSampledStream implements SampledStream {
     }
     const master = this.#masterMeter?.getValue();
     out.master = typeof master === 'number' && Number.isFinite(master) ? master : -Infinity;
-    // How hard the safety limiter is working, in dB of gain reduction. The law
-    // says it should never work at all — `check-mix-law.mjs` asserts that on the
-    // rendered audio, and this is the same guard on the live path, where nothing
-    // else was watching it.
-    out.limiterDb = this.#limiter ? -this.#limiter.reduction : 0;
+    // Gain reduction per stem, in dB. The bed's entries are structurally zero
+    // because those chains have no limiter; the rest are reported so the ≤3 dB
+    // bound can be watched live rather than only asserted offline.
+    let worst = 0;
+    for (const role of LENS_ROLES) {
+      const limiter = this.#roles.get(role)?.limiter;
+      const reduction = limiter ? -limiter.reduction : 0;
+      out[`${role}LimiterDb`] = reduction;
+      if (reduction > worst) worst = reduction;
+    }
+    out.limiterDb = worst;
     return out;
   }
 
@@ -850,11 +1107,19 @@ class ToneSampledStream implements SampledStream {
     if (this.#disposed || !this.#playing) return;
     if (this.#ticker !== undefined) clearInterval(this.#ticker);
     this.#ticker = undefined;
-    for (const voice of this.#voices) voice.dispose();
+    this.#playing = false;
+
+    // Fade, then free. Disposing a sounding buffer source cuts it at whatever
+    // sample the clock happened to be on, and that step is a click — the last
+    // thing anyone should hear from a piece whose whole point is calm.
+    const leaving = this.#voices;
     this.#voices = [];
     this.#levels = new Float32Array(0);
     this.#sources = [];
-    this.#playing = false;
+    for (const voice of leaving) voice.release(STEAL_FADE_SECONDS * 2);
+    setTimeout(() => {
+      for (const voice of leaving) voice.dispose();
+    }, STEAL_FADE_SECONDS * 2000 + 60);
   }
 
   dispose(): void {
@@ -878,13 +1143,19 @@ class ToneSampledStream implements SampledStream {
       chain.highShelf.dispose();
       chain.glue?.dispose();
       chain.trim.dispose();
+      chain.limiter?.dispose();
       chain.meter.dispose();
     }
     this.#roles.clear();
 
+    try {
+      this.#renderCapacity?.stop();
+    } catch {
+      /* already stopped */
+    }
+    this.#renderCapacity = null;
     this.#master?.dispose();
     this.#masterMeter?.dispose();
-    this.#limiter?.dispose();
     this.#bank.dispose();
     this.#playing = false;
   }
@@ -917,7 +1188,7 @@ export async function createSampledStreamFromUrl(
   plan: SessionPlan,
   options: SampledStreamOptions = {},
 ): Promise<SampledStream> {
-  const baseUrl = options.baseUrl ?? '/samples';
+  const baseUrl = options.baseUrl ?? samplesBase();
   const [{ manifest, lenses }, calibration] = await Promise.all([
     loadSampleCatalogue(baseUrl),
     loadCalibration(baseUrl),

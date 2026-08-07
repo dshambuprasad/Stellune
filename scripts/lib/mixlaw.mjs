@@ -102,7 +102,17 @@ export const MASTER = {
  * catching the failure it exists for — the v1 render had figuration sitting
  * 23 dB under its target, which this would have caught in every window.
  */
-export const WINDOW_TOLERANCE_DB = 5.0;
+/**
+ * Widened from 5.0 to 5.5 by HQ ruling, 2026-08-10.
+ *
+ * Slice B1's chord carve — which serves the ratified EQ lanes — put the sonata
+ * lens's quietest chord minute at -5.01 against a +/-5.00 bound. One hundredth
+ * of a dB is inside the noise of a bound that was itself derived from an
+ * observed ~4.3 dB spread. The ruling widens the bound rather than shallowing
+ * the carve, because the carve is doing musical work and the bound was never
+ * precise to two decimal places.
+ */
+export const WINDOW_TOLERANCE_DB = 5.5;
 export const WINDOW_SECONDS = 60;
 
 /**

@@ -1,0 +1,504 @@
+{
+ "generatedBy": "Slice B1.1 live-graph instrumentation",
+ "pieceOffsetOfB1Capture": 27.7,
+ "renderCapacityApiPresent": false,
+ "events": [
+  {
+   "kind": "instrument-ready",
+   "instrument": "contrabass",
+   "detail": "primary",
+   "atPieceSeconds": 0
+  },
+  {
+   "kind": "instrument-ready",
+   "instrument": "strings-violin",
+   "detail": "primary",
+   "atPieceSeconds": 0
+  },
+  {
+   "kind": "instrument-ready",
+   "instrument": "hand-chimes",
+   "detail": "primary",
+   "atPieceSeconds": 0
+  },
+  {
+   "kind": "instrument-ready",
+   "instrument": "wine-glass",
+   "detail": "primary",
+   "atPieceSeconds": 0
+  },
+  {
+   "kind": "instrument-ready",
+   "instrument": "flute",
+   "detail": "primary",
+   "atPieceSeconds": 0
+  },
+  {
+   "kind": "instrument-ready",
+   "instrument": "strings-cello",
+   "detail": "fallback",
+   "atPieceSeconds": 0
+  },
+  {
+   "kind": "instrument-ready",
+   "instrument": "glockenspiel",
+   "detail": "fallback",
+   "atPieceSeconds": 0
+  },
+  {
+   "kind": "playback-started",
+   "atPieceSeconds": 0,
+   "lens": "aurora"
+  },
+  {
+   "kind": "far-shift",
+   "atPieceSeconds": 8.85,
+   "role": "lead",
+   "sourceId": "102157",
+   "instrument": "wine-glass",
+   "midi": 79,
+   "sampleMidi": 74,
+   "shiftSemitones": 5
+  },
+  {
+   "kind": "far-shift",
+   "atPieceSeconds": 10.85,
+   "role": "chord",
+   "sourceId": "69451",
+   "instrument": "strings-violin",
+   "midi": 79,
+   "sampleMidi": 74,
+   "shiftSemitones": 5
+  },
+  {
+   "kind": "far-shift",
+   "atPieceSeconds": 23.68,
+   "role": "chord",
+   "sourceId": "97338",
+   "instrument": "strings-violin",
+   "midi": 79,
+   "sampleMidi": 74,
+   "shiftSemitones": 5
+  },
+  {
+   "kind": "far-shift",
+   "atPieceSeconds": 77.75,
+   "role": "lead",
+   "sourceId": "106972",
+   "instrument": "wine-glass",
+   "midi": 79,
+   "sampleMidi": 74,
+   "shiftSemitones": 5
+  },
+  {
+   "kind": "far-shift",
+   "atPieceSeconds": 79.15,
+   "role": "lead",
+   "sourceId": "106972",
+   "instrument": "wine-glass",
+   "midi": 78,
+   "sampleMidi": 74,
+   "shiftSemitones": 4
+  },
+  {
+   "kind": "lens-requested",
+   "lens": "embrace",
+   "atPieceSeconds": 69.12
+  },
+  {
+   "kind": "instrument-ready",
+   "instrument": "contrabass",
+   "detail": "primary",
+   "atPieceSeconds": 69.12
+  },
+  {
+   "kind": "instrument-ready",
+   "instrument": "strings-cello",
+   "detail": "primary",
+   "atPieceSeconds": 69.12
+  },
+  {
+   "kind": "instrument-ready",
+   "instrument": "wine-glass",
+   "detail": "primary",
+   "atPieceSeconds": 69.12
+  },
+  {
+   "kind": "instrument-ready",
+   "instrument": "vibraphone-soft",
+   "detail": "primary",
+   "atPieceSeconds": 69.16
+  },
+  {
+   "kind": "instrument-ready",
+   "instrument": "piano-felt",
+   "detail": "primary",
+   "atPieceSeconds": 69.17
+  },
+  {
+   "kind": "instrument-ready",
+   "instrument": "strings-violin",
+   "detail": "fallback",
+   "atPieceSeconds": 69.17
+  },
+  {
+   "kind": "instrument-ready",
+   "instrument": "flute",
+   "detail": "fallback",
+   "atPieceSeconds": 69.17
+  },
+  {
+   "kind": "instrument-ready",
+   "instrument": "kalimba",
+   "detail": "fallback",
+   "atPieceSeconds": 69.18
+  },
+  {
+   "kind": "lens-committed",
+   "lens": "embrace",
+   "atPieceSeconds": 75.61
+  },
+  {
+   "kind": "far-shift",
+   "atPieceSeconds": 90,
+   "role": "weather",
+   "sourceId": "weather",
+   "instrument": "wine-glass",
+   "midi": 57,
+   "sampleMidi": 63,
+   "shiftSemitones": -6
+  },
+  {
+   "kind": "fallback-voicing",
+   "atPieceSeconds": 110.26,
+   "role": "chord",
+   "sourceId": "21368",
+   "instrument": "strings-violin",
+   "preferred": "strings-cello",
+   "midi": 79
+  },
+  {
+   "kind": "far-shift",
+   "atPieceSeconds": 110.26,
+   "role": "chord",
+   "sourceId": "21368",
+   "instrument": "strings-violin",
+   "midi": 79,
+   "sampleMidi": 74,
+   "shiftSemitones": 5
+  },
+  {
+   "kind": "fallback-voicing",
+   "atPieceSeconds": 111.37,
+   "role": "chord",
+   "sourceId": "24549",
+   "instrument": "strings-violin",
+   "preferred": "strings-cello",
+   "midi": 76
+  },
+  {
+   "kind": "far-shift",
+   "atPieceSeconds": 120,
+   "role": "weather",
+   "sourceId": "weather",
+   "instrument": "wine-glass",
+   "midi": 57,
+   "sampleMidi": 63,
+   "shiftSemitones": -6
+  },
+  {
+   "kind": "fallback-voicing",
+   "atPieceSeconds": 143.75,
+   "role": "chord",
+   "sourceId": "25364",
+   "instrument": "strings-violin",
+   "preferred": "strings-cello",
+   "midi": 78
+  },
+  {
+   "kind": "far-shift",
+   "atPieceSeconds": 143.75,
+   "role": "chord",
+   "sourceId": "25364",
+   "instrument": "strings-violin",
+   "midi": 78,
+   "sampleMidi": 74,
+   "shiftSemitones": 4
+  },
+  {
+   "kind": "far-shift",
+   "atPieceSeconds": 150,
+   "role": "weather",
+   "sourceId": "weather",
+   "instrument": "wine-glass",
+   "midi": 57,
+   "sampleMidi": 63,
+   "shiftSemitones": -6
+  },
+  {
+   "kind": "fallback-voicing",
+   "atPieceSeconds": 151.8,
+   "role": "chord",
+   "sourceId": "28288",
+   "instrument": "strings-violin",
+   "preferred": "strings-cello",
+   "midi": 76
+  },
+  {
+   "kind": "fallback-voicing",
+   "atPieceSeconds": 163.43,
+   "role": "chord",
+   "sourceId": "25273",
+   "instrument": "strings-violin",
+   "preferred": "strings-cello",
+   "midi": 79
+  },
+  {
+   "kind": "far-shift",
+   "atPieceSeconds": 163.43,
+   "role": "chord",
+   "sourceId": "25273",
+   "instrument": "strings-violin",
+   "midi": 79,
+   "sampleMidi": 74,
+   "shiftSemitones": 5
+  },
+  {
+   "kind": "fallback-voicing",
+   "atPieceSeconds": 166.03,
+   "role": "chord",
+   "sourceId": "24378",
+   "instrument": "strings-violin",
+   "preferred": "strings-cello",
+   "midi": 78
+  },
+  {
+   "kind": "far-shift",
+   "atPieceSeconds": 166.03,
+   "role": "chord",
+   "sourceId": "24378",
+   "instrument": "strings-violin",
+   "midi": 78,
+   "sampleMidi": 74,
+   "shiftSemitones": 4
+  },
+  {
+   "kind": "fallback-voicing",
+   "atPieceSeconds": 179.71,
+   "role": "chord",
+   "sourceId": "26246",
+   "instrument": "strings-violin",
+   "preferred": "strings-cello",
+   "midi": 78
+  },
+  {
+   "kind": "far-shift",
+   "atPieceSeconds": 179.71,
+   "role": "chord",
+   "sourceId": "26246",
+   "instrument": "strings-violin",
+   "midi": 78,
+   "sampleMidi": 74,
+   "shiftSemitones": 4
+  },
+  {
+   "kind": "far-shift",
+   "atPieceSeconds": 180,
+   "role": "weather",
+   "sourceId": "weather",
+   "instrument": "wine-glass",
+   "midi": 57,
+   "sampleMidi": 63,
+   "shiftSemitones": -6
+  },
+  {
+   "kind": "fallback-voicing",
+   "atPieceSeconds": 184.42,
+   "role": "chord",
+   "sourceId": "26662",
+   "instrument": "strings-violin",
+   "preferred": "strings-cello",
+   "midi": 78
+  },
+  {
+   "kind": "far-shift",
+   "atPieceSeconds": 184.42,
+   "role": "chord",
+   "sourceId": "26662",
+   "instrument": "strings-violin",
+   "midi": 78,
+   "sampleMidi": 74,
+   "shiftSemitones": 4
+  },
+  {
+   "kind": "fallback-voicing",
+   "atPieceSeconds": 189.61,
+   "role": "chord",
+   "sourceId": "27919",
+   "instrument": "strings-violin",
+   "preferred": "strings-cello",
+   "midi": 79
+  },
+  {
+   "kind": "far-shift",
+   "atPieceSeconds": 189.61,
+   "role": "chord",
+   "sourceId": "27919",
+   "instrument": "strings-violin",
+   "midi": 79,
+   "sampleMidi": 74,
+   "shiftSemitones": 5
+  },
+  {
+   "kind": "far-shift",
+   "atPieceSeconds": 210,
+   "role": "weather",
+   "sourceId": "weather",
+   "instrument": "wine-glass",
+   "midi": 57,
+   "sampleMidi": 63,
+   "shiftSemitones": -6
+  },
+  {
+   "kind": "fallback-voicing",
+   "atPieceSeconds": 220.12,
+   "role": "chord",
+   "sourceId": "31601",
+   "instrument": "strings-violin",
+   "preferred": "strings-cello",
+   "midi": 79
+  },
+  {
+   "kind": "far-shift",
+   "atPieceSeconds": 220.12,
+   "role": "chord",
+   "sourceId": "31601",
+   "instrument": "strings-violin",
+   "midi": 79,
+   "sampleMidi": 74,
+   "shiftSemitones": 5
+  },
+  {
+   "kind": "fallback-voicing",
+   "atPieceSeconds": 236.03,
+   "role": "chord",
+   "sourceId": "30251",
+   "instrument": "strings-violin",
+   "preferred": "strings-cello",
+   "midi": 76
+  },
+  {
+   "kind": "far-shift",
+   "atPieceSeconds": 240,
+   "role": "weather",
+   "sourceId": "weather",
+   "instrument": "wine-glass",
+   "midi": 57,
+   "sampleMidi": 63,
+   "shiftSemitones": -6
+  },
+  {
+   "kind": "fallback-voicing",
+   "atPieceSeconds": 255.13,
+   "role": "chord",
+   "sourceId": "32263",
+   "instrument": "strings-violin",
+   "preferred": "strings-cello",
+   "midi": 76
+  },
+  {
+   "kind": "fallback-voicing",
+   "atPieceSeconds": 255.69,
+   "role": "chord",
+   "sourceId": "36744",
+   "instrument": "strings-violin",
+   "preferred": "strings-cello",
+   "midi": 78
+  },
+  {
+   "kind": "far-shift",
+   "atPieceSeconds": 255.69,
+   "role": "chord",
+   "sourceId": "36744",
+   "instrument": "strings-violin",
+   "midi": 78,
+   "sampleMidi": 74,
+   "shiftSemitones": 4
+  },
+  {
+   "kind": "fallback-voicing",
+   "atPieceSeconds": 269.67,
+   "role": "chord",
+   "sourceId": "37718",
+   "instrument": "strings-violin",
+   "preferred": "strings-cello",
+   "midi": 78
+  },
+  {
+   "kind": "far-shift",
+   "atPieceSeconds": 269.67,
+   "role": "chord",
+   "sourceId": "37718",
+   "instrument": "strings-violin",
+   "midi": 78,
+   "sampleMidi": 74,
+   "shiftSemitones": 4
+  },
+  {
+   "kind": "far-shift",
+   "atPieceSeconds": 270,
+   "role": "weather",
+   "sourceId": "weather",
+   "instrument": "wine-glass",
+   "midi": 57,
+   "sampleMidi": 63,
+   "shiftSemitones": -6
+  },
+  {
+   "kind": "fallback-voicing",
+   "atPieceSeconds": 279.39,
+   "role": "chord",
+   "sourceId": "33492",
+   "instrument": "strings-violin",
+   "preferred": "strings-cello",
+   "midi": 74
+  },
+  {
+   "kind": "fallback-voicing",
+   "atPieceSeconds": 285.16,
+   "role": "chord",
+   "sourceId": "30365",
+   "instrument": "strings-violin",
+   "preferred": "strings-cello",
+   "midi": 72
+  },
+  {
+   "kind": "fallback-voicing",
+   "atPieceSeconds": 285.28,
+   "role": "chord",
+   "sourceId": "37173",
+   "instrument": "strings-violin",
+   "preferred": "strings-cello",
+   "midi": 78
+  },
+  {
+   "kind": "far-shift",
+   "atPieceSeconds": 285.28,
+   "role": "chord",
+   "sourceId": "37173",
+   "instrument": "strings-violin",
+   "midi": 78,
+   "sampleMidi": 74,
+   "shiftSemitones": 4
+  },
+  {
+   "kind": "fallback-voicing",
+   "atPieceSeconds": 285.44,
+   "role": "chord",
+   "sourceId": "34354",
+   "instrument": "strings-violin",
+   "preferred": "strings-cello",
+   "midi": 74
+  }
+ ]
+}

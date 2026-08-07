@@ -1,0 +1,55 @@
+# Publish the app to GitHub Pages on every push to main.
+#
+# The PWA is how this gets shared: a free Apple ID sideloads only to your own
+# device for seven days, and TestFlight needs the $99 programme, so a URL a
+# friend can open is the plan. Pages serves it.
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Pages needs these; `id-token` is what lets the deploy prove it came from
+# this workflow rather than from anywhere else.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time, and never cancel one that is already publishing — a
+# half-written site is worse than a slightly stale one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Build
+        # A project page is served from /<repo>/, so the bundle's asset paths
+        # have to be built for that prefix. Vite's default base of './' works
+        # for relative assets but not for the audio the sampler fetches by
+        # absolute path, which is why this is set explicitly.
+        run: npx vite build --base=/Stellune/
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
