@@ -1709,3 +1709,16 @@ Correlation report in `docs/B11_CORRELATION.md`, measurements in
 **NEXT:** Shambu's re-listen on the new capture — especially whether window A
 (13–18 s) survives, since nothing in the log explains it — and a ruling on the
 limiter engagement bound. HALT.
+
+**◇ DEPLOY, 2026-08-10.** Pushed to `dshambuprasad/Stellune`; Pages is live at
+**https://dshambuprasad.github.io/Stellune/**. CI: types/tests/build green, the
+mix law red on the 14 checks above. The deployed site immediately found a defect
+no local run could have: **the first sound was gated behind ~100 simultaneous
+sample requests** — `ready()` awaits every tier since B1.1, a lens is about eight
+instruments of a dozen notes each, and a cold GitHub Pages CDN dropped some of
+them. `curl` returned HTTP 200, the right MIME and the right byte count for every
+file I checked, including the one the browser reported as unloadable, so the
+files were never the problem; the burst was. Loading is now pooled three
+instruments at a time with one delayed retry. *Also corrected in this session: I
+first reported "the audio doesn't load" from a single probe taken seconds after
+the deploy, before the CDN had propagated — all fifteen instruments serve.*

@@ -155,24 +155,51 @@ export class SamplerBank {
     const { primary, fallback } = instrumentsForLens(this.#lenses, lensId);
     let loaded = 0;
     const total = primary.length + fallback.length;
-    const track = <T>(p: Promise<T>): Promise<T> =>
-      p.then((v) => {
-        loaded += 1;
-        this.#onProgress?.(loaded, total);
-        return v;
-      });
 
-    const announce = (id: string, tier: 'primary' | 'fallback') => (p: Promise<Tone.Sampler>) =>
-      p.then((v) => {
-        this.#onInstrumentReady?.(id, tier);
-        return v;
-      });
+    const one = async (id: string, tier: 'primary' | 'fallback'): Promise<void> => {
+      await this.#loadInstrument(id);
+      loaded += 1;
+      this.#onProgress?.(loaded, total);
+      this.#onInstrumentReady?.(id, tier);
+    };
 
-    await Promise.all(primary.map((id) => track(announce(id, 'primary')(this.#loadInstrument(id)))));
-    const rest = Promise.all(
-      fallback.map((id) => track(announce(id, 'fallback')(this.#loadInstrument(id)))),
-    ).then(() => undefined);
+    await this.#pool(primary, (id) => one(id, 'primary'));
+    const rest = this.#pool(fallback, (id) => one(id, 'fallback'));
     return { whenComplete: rest };
+  }
+
+  /**
+   * Run a list of loads a few at a time.
+   *
+   * `Promise.all` over every instrument was the first version, and it worked
+   * perfectly on localhost and failed on the deployed site: a lens is ~8
+   * instruments of ~12 notes each, so the first note was gated behind ~100
+   * simultaneous requests, and GitHub Pages dropped some of them. The file was
+   * there — `curl` returned 200 with the right MIME and byte count — the burst
+   * was simply too wide for a cold CDN. A first sound that depends on a hundred
+   * requests all succeeding at once is a first sound that will fail for someone.
+   *
+   * Three at a time keeps the wire busy without asking a static host for a
+   * hundred sockets. Anything that still fails is retried once, because the
+   * common failure here is transient by nature.
+   */
+  async #pool(ids: string[], run: (id: string) => Promise<void>, width = 3): Promise<void> {
+    const queue = [...ids];
+    const workers = Array.from({ length: Math.min(width, queue.length) }, async () => {
+      for (let id = queue.shift(); id !== undefined; id = queue.shift()) {
+        try {
+          await run(id);
+        } catch (error) {
+          // A beat before retrying. An immediate second attempt lands in the
+          // same congested moment that lost the first one.
+          await new Promise((resolve) => setTimeout(resolve, 400));
+          await run(id).catch(() => {
+            throw error instanceof Error ? error : new Error(String(error));
+          });
+        }
+      }
+    });
+    await Promise.all(workers);
   }
 
   /** Which instruments this lens would fetch, without fetching them. */
