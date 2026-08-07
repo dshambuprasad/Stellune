@@ -1639,16 +1639,44 @@ inaudible on percussive material and makes the measurement mean what it says.
 prompted the amendment is gone — and much of that came free from the shift cap,
 because a kalimba resampled +19 semitones *is* a 3× time-compressed transient.
 
-**WHAT STILL FAILS, AND I HAVE NOT TUNED IT.** Limiter engagement on the moving
-stems: aurora lead 0.92% ✓, embrace lead 1.94%, sonata lead 3.63%, pulse
-figuration 2.45% / lead 1.80%, ground figuration 8.65% / lead 1.16% — against the
-ratified **≤1%**. Everything else passes on every lens: stem targets, the arc
-(now ±5.5 by HQ ruling), hierarchy, unison guard, headroom, EQ lanes, glue,
-loudness, zero on the bed, and the shift cap. The 1% figure was proposed before
-anyone had measured struck figuration; ≤3 dB on 2–9% of samples is glue, not
-squash, and the bed is untouched. **Raising it is a ratification, so it is
-Shambu's, not mine.** Until then `npm run check:mix-law` — and the CI job that
-runs it — is red on that one assertion, honestly.
+**WHAT STILL FAILS — 14 CHECKS, NOT ONE.** *(Corrected. The first version of
+this paragraph said "everything else passes" and named only the limiter
+engagement. That was wrong, and it was wrong in the flattering direction.)*
+
+The CI run reproduced the local run line for line, identical numbers on a Linux
+runner and on macOS, which at least says the measurement is deterministic:
+
+```
+lead        -22.6 dBFS            (target -21, ±1)     aurora
+lead        -22.2 dBFS            (target -21, ±1)     pulse
+figuration  -20.1 dBFS            (target -19, ±1)     ground
+figuration over ground  +2.9 dB   (law: +4)            ground
+figuration over chord   +4.9 dB   (law: +6)            ground
+chord  worst window -7.8 dB @210s (±5.5)               embrace
+chord  worst window -7.7 dB @210s (±5.5)               sonata
+limiter active 0.05%, worst catch 3.3 dB (max 3 dB)    pulse
++ six × limiter engagement 1.16-8.65%  (max 1%)
+```
+
+**They share one cause, and it is mine.** The stem trims are calibrated on the
+RAW stems and applied before the transient limiter runs. Limiting removes peaks,
+which lowers RMS — so figuration and lead now measure 1–1.6 dB under the targets
+the trims were computed to hit, and the hierarchy margins that are derived from
+those levels collapse with them. The chord windows at t=210 s widened for the
+same reason from the other side. **The calibration pass needs to measure the
+stem AFTER limiting and re-trim**, which is one more iteration in
+`trimsForTargets`; I have not made that change, because the slice was at its
+halt and re-ordering calibration touches ratified semantics.
+
+The limiter-engagement bound is still a genuine ratification question on its own
+merits — 1% was proposed before anyone had measured struck figuration, and ≤3 dB
+on 2–9% of samples is glue rather than squash with the bed untouched — but it is
+**six of fourteen**, not the whole story.
+
+One more real inconsistency the failure list surfaced: `render-score.mjs` still
+runs a **master** limiter (`limitStereo`), which the live graph no longer has now
+that limiting moved to the stems. The two paths diverge there and the offline one
+is catching 3.3 dB on the pulse lens. That wants deleting, not tuning.
 
 **THE SEAM IS CLOSED.** `src/app/session.ts` now builds
 `createSampledStreamFromUrl` instead of the Phase 3.5 synth, and `setLens` hands
