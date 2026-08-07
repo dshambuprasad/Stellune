@@ -115,7 +115,7 @@ export {
   subjectKey,
 } from './conductor.ts';
 
-export { renderWindow } from './stream.ts';
+export { renderWindow, WEATHER_REGISTER_HINT } from './stream.ts';
 
 // Slice A3 — the FIGURATION layer
 export type { SoundingTone } from './chordVoices.ts';

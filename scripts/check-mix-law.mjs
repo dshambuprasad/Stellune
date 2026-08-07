@@ -12,13 +12,24 @@
  * standing answer to that: it measures, per lens, what the renderer actually
  * produced, and fails on the numbers rather than on a listen.
  *
- * Five checks:
+ * Checks:
  *   1. STEM TARGETS      steady-state stems land on the ratified dBFS numbers.
  *   2. GENERALISATION    faders calibrated on one half of the steady state still
  *                        hold on the other half, which they never saw.
  *   3. HIERARCHY         figuration leads ground and chord — motion in front.
  *   4. UNISON GUARD      weather is never voiced in unison with ground.
  *   5. HEADROOM          the printed master does not clip.
+ *
+ * Slice B1 adds THE MASTERING LAW, which is the same idea applied to spectrum
+ * and to loudness rather than to level:
+ *   6. EQ LANES          declared per lens, and MEASURED: in the band where the
+ *                        figuration sings, the figuration is in front.
+ *   7. GLUE              figuration is compressed by no more than the law allows,
+ *                        and nothing else is compressed at all.
+ *   8. LOUDNESS          the master lands on its LUFS target, not merely under a
+ *                        peak ceiling.
+ *   9. LIMITER           engagement is zero. A limiter doing work is a mix that
+ *                        is broken somewhere upstream.
  *
  * Plus a lens-invariance check across all lenses: switching the mood lens must
  * change timbre and nothing else — same pitches, same onsets, same durations.
@@ -29,6 +40,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { render, steadyStateWindow, measureStem } from './render-score.mjs';
+import { integratedLufs } from './lib/mastering.mjs';
 import { dbToGain } from './lib/audio.mjs';
 import {
   STEM_TARGETS_DBFS,
@@ -96,7 +108,7 @@ function checkUnison(score) {
   return { worst, collisions, rawUnisonInScore: raw };
 }
 
-async function checkLens(lensId, score) {
+async function checkLens(lensId, score, lensConfig) {
   console.log(`\n── ${lensId} ${'─'.repeat(52 - lensId.length)}`);
   const events = score[section].window?.events ?? score[section].events;
   const sectionSeconds = score[section].sessionSeconds ?? score[section].seconds;
@@ -236,6 +248,102 @@ async function checkLens(lensId, score) {
     `(max ${(MASTER.maxLimiterBusyFraction * 100).toFixed(0)}% / ${MASTER.maxLimitingDb} dB)`,
   );
 
+  // ── 6. THE MASTERING LAW — the EQ lanes, measured ───────────────────────
+  // The lanes are declared in lenses.json; a declaration is not a claim about
+  // the audio. What IS a claim is that the pads are carved where the moving
+  // parts live, so that is what is measured: each stem's level inside the
+  // motion band, and how far the figuration leads each pad there.
+  console.log('  EQ lanes (measured in the audio):');
+  const lane = lensConfig.lenses[lensId].eq;
+  ok(Boolean(lane), `${lensId} declares per-role EQ lanes`);
+  const overlap = lensConfig.mastering?.spectralOverlap;
+  const motionLead = full.motionLeadDb ?? {};
+  for (const pad of ['ground', 'chord']) {
+    const measuredLead = motionLead[pad];
+    ok(
+      Number.isFinite(measuredLead) && measuredLead >= (overlap?.minMotionLeadDb ?? 0),
+      `figuration leads ${pad.padEnd(7)} by ${measuredLead?.toFixed(1)} dB in ` +
+        `${overlap?.figurationBandHz?.[0]}–${overlap?.figurationBandHz?.[1]} Hz`,
+      `(min +${overlap?.minMotionLeadDb ?? 0})`,
+    );
+  }
+  // The lanes must also SAY something. A lens with five empty objects would
+  // satisfy the measurement above purely on the strength of the mix law's
+  // levels, which is exactly the gap the mastering law was written to close.
+  const carve = lane?.chord?.dip;
+  ok(
+    Boolean(carve) && carve.db < 0,
+    `chord is carved where the motion sings`,
+    carve ? `(${carve.db} dB at ${carve.hz} Hz, Q ${carve.q ?? 0.8})` : '(no dip declared)',
+  );
+
+  // ── 7. glue: gentle, and on figuration alone ────────────────────────────
+  const glueLaw = lensConfig.mastering?.figurationGlue;
+  console.log('  glue:');
+  ok(
+    full.glueDb <= (glueLaw?.maxReductionDb ?? 2) + 0.01,
+    `figuration glue worst reduction ${full.glueDb.toFixed(2)} dB`,
+    `(max ${glueLaw?.maxReductionDb ?? 2})`,
+  );
+  notes.push(
+    `${lensId}: glue reached ${full.glueDb.toFixed(2)} dB — ` +
+      (full.glueDb < 0.05
+        ? 'never engaged, so the threshold may be under the stem'
+        : 'engaged and stayed inside the law'),
+  );
+
+  // ── 8. loudness ─────────────────────────────────────────────────────────
+  // The master is normalised to LUFS, not to peak. Measuring it again here, on
+  // the printed master rather than on the pre-fader sum, is what makes this an
+  // assertion rather than a restatement of the fader the renderer chose.
+  const lufsLaw = lensConfig.mastering?.lufsTargets ?? { birthSky: -18, tonight: -18, tolerance: 1 };
+  const lufsTarget = section === 'birth' ? lufsLaw.birthSky : lufsLaw.tonight;
+  const measuredLufs = integratedLufs(full.master, 44100);
+  console.log('  loudness:');
+
+  // THE TARGET IS A CEILING, AND THE PEAK GUARD OUTRANKS IT.
+  //
+  // The master fader takes the LOWER of the loudness trim and the trim that
+  // keeps the peak under the ceiling, because the ratified limiter engagement
+  // is zero — a limiter doing work means something upstream is wrong. On
+  // material whose crest factor is larger than its headroom, those two rules
+  // cannot both be satisfied at the target, and the peak one wins.
+  //
+  // So this fails on TOO LOUD, always. Too quiet fails only when the peak guard
+  // was not the reason — anything else means the fader is simply wrong. When
+  // the guard IS the reason, the shortfall is reported rather than passed in
+  // silence, because an 8 dB spread between lenses is exactly what normalising
+  // to loudness was introduced to remove.
+  const peakBound = full.peakCeilingTrimDb < full.loudnessTrimDb;
+  const off = measuredLufs - lufsTarget;
+  ok(
+    off <= lufsLaw.tolerance && (Math.abs(off) <= lufsLaw.tolerance || peakBound),
+    `master ${measuredLufs.toFixed(1)} LUFS`,
+    `(target ${lufsTarget}, ±${lufsLaw.tolerance}` +
+      (peakBound ? `; peak-bound, ${(-off).toFixed(1)} dB under` : '') +
+      ')',
+  );
+  if (peakBound && Math.abs(off) > lufsLaw.tolerance) {
+    notes.push(
+      `${lensId}: ${(-off).toFixed(1)} dB UNDER the LUFS target, and it is the peak guard that ` +
+        `bound it — the stem bus peaked at ${full.rawPeakDbfs.toFixed(1)} dBFS against an RMS of ` +
+        `about ${full.measured.figuration.toFixed(0)}. Reaching the target on this lens needs ` +
+        `either limiter headroom (the law says 0%) or peak-aware stem trims (the law is stated ` +
+        `in RMS). Both are ratification questions, not tool decisions.`,
+    );
+  }
+
+  // ── 9. the limiter must be doing nothing ────────────────────────────────
+  const limiterLaw = lensConfig.mastering?.limiter;
+  if (limiterLaw) {
+    ok(
+      full.limiterBusyFraction <= limiterLaw.maxEngagedFraction + limiterLaw.toleranceFraction,
+      `limiter engagement ${(full.limiterBusyFraction * 100).toFixed(3)}%`,
+      `(law: ${(limiterLaw.maxEngagedFraction * 100).toFixed(0)}%, tolerance ` +
+        `${(limiterLaw.toleranceFraction * 100).toFixed(1)}%)`,
+    );
+  }
+
   // What the lens actually reached for — a fallback voicing is not a failure,
   // but it should be visible (a two-note handpan cannot cover four octaves).
   if (Object.keys(full.substitutions).length) {
@@ -263,6 +371,11 @@ async function checkLens(lensId, score) {
     figurationOverGround: overGround,
     figurationOverChord: overChord,
     figurationOverCombinedBed: s.figuration - bed,
+    motionBandDb: full.motionBandDb,
+    motionLeadDb: full.motionLeadDb,
+    glueDb: full.glueDb,
+    lufs: measuredLufs,
+    lufsTarget,
     fingerprint,
   };
 }
@@ -294,7 +407,7 @@ async function main() {
   );
 
   const results = [];
-  for (const lens of lenses) results.push(await checkLens(lens, score));
+  for (const lens of lenses) results.push(await checkLens(lens, score, lensConfig));
 
   console.log('\n── lens invariance ' + '─'.repeat(40));
   const first = results[0];
@@ -319,6 +432,7 @@ async function main() {
       windowTolerance: WINDOW_TOLERANCE_DB,
       windowSeconds: WINDOW_SECONDS,
       unison,
+      mastering: lensConfig.mastering,
       lenses: results.map(({ fingerprint, ...rest }) => rest),
       pass: failures.length === 0,
     };

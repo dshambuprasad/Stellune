@@ -28,7 +28,8 @@
     "test": "vitest run",
     "test:e2e": "playwright test",
     "test:smoke": "playwright test smoke",
-    "screens": "playwright test screens"
+    "screens": "playwright test screens",
+    "calibrate": "node scripts/calibrate-mix.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",

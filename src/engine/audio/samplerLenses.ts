@@ -35,12 +35,83 @@ export interface LensVoicing {
   gainDb?: number;
 }
 
+/**
+ * One role's EQ lane — THE MASTERING LAW's half of the mix.
+ *
+ * The mix law levels the stems; it does not stop them occupying the same
+ * spectrum. Five roles can each hit their dBFS target and still pile into
+ * 200–800 Hz, where the ear cannot separate them, which is what a musician's
+ * review of the B0 clips found: correct levels, muddy result. So every lens
+ * declares where each role lives, and the pads are CARVED where the moving
+ * parts sing rather than the moving parts being pushed louder.
+ *
+ * The dip is the load-bearing part: a −5 dB notch in the chord bed at 2 kHz
+ * costs the pad almost nothing (its energy is an octave lower) and hands the
+ * figuration a clear window it did not have to shout through.
+ */
+export interface EqLane {
+  /** Everything below this is gone. Keeps roles out of each other's mud. */
+  highpassHz?: number;
+  lowShelf?: { hz: number; db: number };
+  /** The carve. Negative dB on a pad; where the motion lives. */
+  dip?: { hz: number; db: number; q?: number };
+  highShelf?: { hz: number; db: number };
+}
+
 export interface LensDefinition {
   title: string;
   /** Which reference this lens is an homage to (MUSICAL_VISION §5). */
   homage: string;
   palette: string;
   roles: Record<VoiceRole, LensVoicing[]>;
+  /** Per-role spectral lanes. Documented per lens in `_curve`. */
+  eq?: Partial<Record<VoiceRole, EqLane>>;
+}
+
+/**
+ * THE MASTERING LAW's global half — loudness, glue, and the limiter's leash.
+ *
+ * Ratified in Slice B1. Three decisions worth keeping the reasons for:
+ *
+ *   LUFS, NOT PEAK. Peak normalisation rewards crest factor, not loudness: a
+ *   sparse early sky and a full late one can share a peak and differ by 8 dB of
+ *   perceived level. Ambient listening wants a stable, quiet floor, so the
+ *   master is normalised to −18 LUFS — well under streaming's −14, because this
+ *   is music to fall asleep under, not to compete on a playlist.
+ *
+ *   GLUE ON FIGURATION ONLY. The macro arc IS the composition; Slice A4 spent
+ *   itself shaping how the night swells. Compressing the master would undo that.
+ *   Figuration alone gets ≤2 dB of slow reduction, to stop individual chimes
+ *   poking through — glue, never squash.
+ *
+ *   THE LIMITER MUST DO NOTHING. It stays in the graph as a safety net and the
+ *   check asserts it never engages. A limiter that is working is a mix that is
+ *   broken somewhere upstream.
+ */
+export interface MasteringConfig {
+  lufsTargets: { birthSky: number; tonight: number; tolerance: number };
+  limiter: { ceilingDbfs: number; maxEngagedFraction: number; toleranceFraction: number };
+  figurationGlue: {
+    thresholdDb: number;
+    ratio: number;
+    attackSeconds: number;
+    releaseSeconds: number;
+    kneeDb: number;
+    maxReductionDb: number;
+  };
+  spectralOverlap: {
+    figurationBandHz: [number, number];
+    leadBandHz: [number, number];
+    padBandHz: [number, number];
+    /**
+     * How far figuration must lead each pad INSIDE the motion band.
+     *
+     * Comparative on purpose. "How much of a pad's energy sits in the motion
+     * band" was tried first and is unanswerable: a violin section genuinely
+     * lives at 700–5000 Hz, so the number condemned a mix that was fine.
+     */
+    minMotionLeadDb: number;
+  };
 }
 
 /**
@@ -64,6 +135,7 @@ export interface LensConfig {
   defaults: { tonight: string; birthSky: string };
   shading: ShadingConfig;
   lenses: Record<string, LensDefinition>;
+  mastering?: MasteringConfig;
 }
 
 /** One recorded note of one instrument. */
@@ -234,4 +306,94 @@ export function instrumentsForLens(
   }
   for (const id of primary) fallback.delete(id);
   return { primary: [...primary], fallback: [...fallback] };
+}
+
+/**
+ * THE MASTERING LAW's defaults, used when a config omits the block.
+ *
+ * These are the ratified numbers from `public/samples/lenses.json`; duplicating
+ * them here is what lets a test build a minimal config without restating the
+ * whole law, and the check asserts the two agree.
+ */
+export const MASTERING_DEFAULTS: MasteringConfig = {
+  lufsTargets: { birthSky: -18, tonight: -18, tolerance: 1.0 },
+  limiter: { ceilingDbfs: -1.0, maxEngagedFraction: 0.0, toleranceFraction: 0.002 },
+  figurationGlue: {
+    thresholdDb: -16,
+    ratio: 2.0,
+    attackSeconds: 0.25,
+    // 1.0, not 1.2: Web Audio's DynamicsCompressorNode caps release at one
+    // second and throws above it. A law the two paths implement differently is
+    // not one law, so the number is what both can honour.
+    releaseSeconds: 1.0,
+    kneeDb: 6,
+    maxReductionDb: 2.0,
+  },
+  spectralOverlap: {
+    figurationBandHz: [700, 5000],
+    leadBandHz: [900, 6000],
+    padBandHz: [80, 700],
+    minMotionLeadDb: 0.0,
+  },
+};
+
+/** The mastering law in force for a config — its own block, or the defaults. */
+export function masteringFor(config: LensConfig): MasteringConfig {
+  return { ...MASTERING_DEFAULTS, ...(config.mastering ?? {}) };
+}
+
+/**
+ * A lens's EQ lane for one role, or an empty lane if it declares none.
+ *
+ * An absent lane means "no carve" and is a legitimate choice — the `ground`
+ * lens is a background listen and is deliberately the least sculpted — so this
+ * returns a neutral lane rather than throwing.
+ */
+export function eqLaneFor(config: LensConfig, lensId: string, role: VoiceRole): EqLane {
+  return config.lenses[lensId]?.eq?.[role] ?? {};
+}
+
+/**
+ * Check the EQ lanes actually separate the roles.
+ *
+ * The law is not "every lens has an `eq` block" — that would be satisfied by
+ * five empty objects. It is that the PADS ARE CARVED WHERE THE MOTION LIVES, so
+ * this asserts the relationship: figuration and lead must be highpassed above
+ * the pads, and any lens that carves at all must dip its chord bed inside the
+ * motion band. `scripts/check-mix-law.mjs` then measures the result in the
+ * rendered audio, which is the claim that actually matters.
+ */
+export function validateEqLanes(config: LensConfig): string[] {
+  const problems: string[] = [];
+  const { figurationBandHz } = masteringFor(config).spectralOverlap;
+
+  for (const [lensId, lens] of Object.entries(config.lenses)) {
+    if (!lens.eq) continue;
+    const lane = (role: VoiceRole): EqLane => lens.eq?.[role] ?? {};
+    const hp = (role: VoiceRole): number => lane(role).highpassHz ?? 0;
+
+    for (const motion of ['figuration', 'lead'] as const) {
+      for (const pad of ['ground', 'chord'] as const) {
+        if (hp(motion) <= hp(pad)) {
+          problems.push(
+            `lens "${lensId}": ${motion} is highpassed at ${hp(motion)} Hz, not above ${pad} at ${hp(pad)} Hz — ` +
+              `the moving parts must sit above the bed, not inside it`,
+          );
+        }
+      }
+    }
+
+    const dip = lane('chord').dip;
+    if (!dip) {
+      problems.push(`lens "${lensId}": chord has no dip — nothing is carved for figuration to sing through`);
+    } else if (dip.db >= 0) {
+      problems.push(`lens "${lensId}": chord dip is ${dip.db} dB, which is a boost, not a carve`);
+    } else if (dip.hz < figurationBandHz[0] || dip.hz > figurationBandHz[1]) {
+      problems.push(
+        `lens "${lensId}": chord dip at ${dip.hz} Hz is outside the motion band ` +
+          `${figurationBandHz[0]}–${figurationBandHz[1]} Hz, so it carves where nothing sings`,
+      );
+    }
+  }
+  return problems;
 }

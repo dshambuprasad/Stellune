@@ -1397,3 +1397,152 @@ had hit a dev server serving a 3 MB unminified Tone.js, which is a measurement
 of the harness, not the app. 385 unit tests pass; typecheck clean. **NEXT:
 Shambu's eye on the sixteen screenshots — that gate decides whether Phase 4 is
 done or the face needs another pass.** HALT.
+
+---
+
+## 2026-08-07 — Slice B1: the sampled instruments reach the live app
+
+**WHAT LANDED.** The app now plays the real instruments. `sampledStream.ts` is
+the live player: it reads the score from the mapping layer, voices it through
+the mood lenses, and mixes it under the mix law and a new mastering law. Six
+tasks, and the two that mattered most turned out to be the ones nobody asked
+for.
+
+**1 — THE UNISON DEFECT, FIXED AT SOURCE.** `MusicalEvent` gains
+`registerHint`, weather carries `+12`, and `stream.ts` emits it. On 2026-08-07
+stem forensics found ground and weather both on midi 45 for a whole session —
+two roles stacked on one pitch is the "continuous note" Shambu heard and their
+mutual detune-beating is the "noise". The renderer had patched it by transposing
+weather itself, but a patch in one renderer is not a fix; the next renderer
+repeats it. Carrying the hint on the event means the separation travels with the
+score. Four tests, including the gate: voiced with its hint, weather can never
+land within 12 semitones of a concurrent ground note. `docs/a4-score.json` now
+exports the hint; `render-score.mjs` supplies it to the pre-hint `a3-score.json`
+and leaves any event that already has one alone, so the score always wins where
+it has an opinion.
+
+**2 — ONE SCHEDULE, TWO PLAYERS.** `scripts/lib/schedule.mjs` decides which
+instrument voices which note, at what pitch, velocity, pan, tilt and twinkle.
+Both the live Tone graph and `render-score.mjs` import it. The alternative — two
+implementations plus a parity test — was considered and rejected: **a parity
+test only tells you the day they diverged; one function means they cannot.** The
+options argument was then deleted from both call sites, because a knob two
+consumers can set differently is the same failure wearing a different hat. What
+`test/schedule.test.ts` guards is therefore structural: both files must import
+the shared module, neither may call `sampler.pick` or `chooseVoice`, neither may
+pass `roleShaping`, and neither may add `WEATHER_OCTAVE_SHIFT` to a midi number.
+Lens invariance is asserted on the schedule all five lenses actually play, and
+also **live** — mid-session, `scheduleFor(80,140)` before and after a lens
+change is byte-identical while the instrument sets genuinely differ.
+
+**3 — THE MASTERING LAW.** The mix law levels the stems; it says nothing about
+where they sit in the spectrum, and a musician's review found exactly that — every
+fader right, the result still muddy. So each lens declares per-role EQ lanes
+(documented per lens in a `_curve` string): the pads are carved where the moving
+parts sing rather than the moving parts being pushed louder. Figuration alone
+gets glue, and `maxReductionDb` is **enforced in the compressor, not implied by
+its settings** — threshold −26/ratio 2 was chosen to "usually" stay under 2 dB
+and reached **7.4 dB** the moment the stem was correctly trimmed onto its target.
+Settings that satisfy a law at one level do not satisfy it at another; a clamp
+does. Loudness is normalised to **−18 LUFS** (BS.1770-4, K-weighted, two-stage
+gated) instead of to peak. The checker gained four assertions and a first
+measurement that had to be thrown away: "how much of a pad's energy sits in the
+motion band" is unanswerable — a violin section genuinely lives at 700–5000 Hz —
+so it now measures the comparative claim the lanes actually make, that
+**figuration leads each pad inside the band where figuration sings** (+17.9 dB
+over ground, +4.8 dB over chord on aurora).
+
+**4 — WHAT THE LIVE GRAPH MAY NOT DO.** It may not measure its own output. The
+mix law is stated as measured steady-state stem levels; the renderer can satisfy
+that directly, and a live graph metering its bus to chase a target is a
+compressor wearing a disguise that would flatten the very macro arc Slice A4
+exists to shape. So `npm run calibrate` renders each lens's steady state, and
+`public/samples/calibration.json` carries the measurement the live graph applies
+as static faders. One measurement, two consumers — the same arrangement
+`schedule.mjs` makes for the notes. An uncalibrated lens falls back to a
+documented approximation and the harness says so on screen rather than quietly
+playing an unlevelled mix.
+
+**FIVE DEFECTS THE BUILD FOUND, EACH ONLY FINDABLE BY RUNNING IT.**
+*(a)* A `Tone.Sampler` is ONE node, so connecting it to a per-note panner fans
+its whole output there and every note of a role lands wherever the most recent
+star happened to be. Azimuth panning is how the sky has a shape, so each voice
+now builds its own source from the bank's buffers; the bank still owns the
+download, the format choice and the lens plan.
+*(b)* Web Audio caps `DynamicsCompressorNode.release` at one second and throws
+above it — the ratified 1.2 s was unbuildable live while the offline glue would
+have run at 1.2 quite happily. **A law the two paths implement differently is
+not one law**, so the number moved to 1.0.
+*(c)* Starting mid-piece played ground and weather over silence: every span
+starts only the notes that BEGIN inside it, so a chord voice that began at t=100
+and holds for six minutes never begins inside any span the player sees. The
+first span after `play(from)` now resumes already-sounding notes at the right
+point in their recording, at the amplitude their arc had already reached, with a
+short fade instead of a re-attack.
+*(d)* A shared reverb bus put chord 6 dB and lead 5 dB under target while ground
+and weather sat exactly on theirs. The law is stated on stems and the renderer's
+stems each carry their own reverb, so a shared return is not the same thing —
+each role now has its own space, and `SEND_LEVELS` was corrected to the
+renderer's numbers digit for digit (they had been written out from memory).
+*(e)* The harness meters lied. `Tone.Meter` at 0.9 smoothing reads a continuous
+drone accurately and a bursty role about 5 dB low, which made the chord bed and
+the lead look under the law when they were not — a meter that lies in one
+direction for one kind of signal is worse than none, because it invites a fix to
+a problem that is not there. Smoothing is 0.4 and the panel says it is a display,
+not the instrument.
+
+**EVIDENCE.** 385 tests green (30 new in `test/schedule.test.ts`), boundaries
+included — that guard caught a debug `import * as Tone` I had put in the harness
+and it was right to; typecheck clean. `check-mix-law.mjs` across all five lenses:
+stem targets, the arc, hierarchy, unison guard, headroom, EQ lanes, glue,
+loudness, and limiter engagement, written to `docs/b1-mix-law.json`. Every stem
+lands on its target within the ±1 dB tolerance on every lens, figuration leads
+both bed layers in every window, the unison guard holds, and the limiter never
+engages.
+
+**THE CHECK DOES NOT FULLY PASS, AND I HAVE NOT MADE IT.** One assertion fails:
+on the **sonata** lens the chord bed's quietest minute (t=210 s) sits **−5.01 dB**
+from its own gated average, against a ±5.00 bound. Embrace is −4.94 at the same
+minute, aurora −2.54. The chord carve is what moved them — a dip in the motion
+band costs proportionally more in the minute where the bed is thinnest. One
+hundredth of a dB over a bound B0 set from an observed ~4.3 dB spread is inside
+the noise of the measurement, and there are two ways to clear it: shallow
+sonata's chord dip, or widen `WINDOW_TOLERANCE_DB`. **Both are tuning a ratified
+number to make my own change pass, so I did neither.** It is reported here and in
+`docs/b1-mix-law.json` for Shambu to rule on.
+
+**LIVE PLAYBACK, ACTUALLY RUN.** `npm run dev` → `harness.html`, played through
+the browser: instruments load, the piece plays, the star field's per-voice levels
+name real stars, the lens swaps mid-session without stopping the music, and the
+safety limiter's worst gain reduction over a 27-second watch was **0.00007 dB** —
+the law's 0% holds on the live path too. Tapping the live master with an analyser
+over t=322–345 s gave **−22.23 dBFS RMS / −6.40 peak**; the offline renderer
+printing that identical window gave **−21.3 / −5.31**. Two different resamplers
+and two entirely different reverbs, agreeing within ~1 dB.
+
+**I DID NOT LISTEN, AND CANNOT.** Two clips are committed for the ear that can:
+`docs/b1-live-aurora-to-embrace.mp3` is 150 seconds captured from the LIVE graph,
+including the aurora→embrace change at ~41 s in, and `docs/b1-aurora-steady.mp3`
+is 120 seconds of the steady state from the offline renderer. The ear gate is
+Shambu's.
+
+**ONE THING FOR RATIFICATION, NOT A TOOL DECISION.** Three of five lenses cannot
+reach −18 LUFS with the limiter idle. Figuration's crest factor after RMS
+matching is about 29 dB — the `ground` lens falls through to kalimba 525 times
+and its figuration stem, correctly trimmed to −19 dBFS RMS, peaks at **+10 dBFS**
+— so the peak guard, not loudness, sets the fader and the master lands 8.9 dB
+under target. The master fader takes the lower of the two, the checker fails on
+too-loud always and on too-quiet unless the peak guard was demonstrably the
+cause, and the shortfall is reported per lens rather than passed in silence.
+Closing it needs either limiter headroom (the law says 0% — Shambu's own
+instruction) or peak-aware stem trims (the law is stated in RMS). Both change a
+ratified number, so both are Shambu's call. **An 8 dB spread between lenses is
+exactly what normalising to loudness was introduced to remove, so this should not
+sit unratified for long.**
+
+**ALSO OPEN.** Phase 4's `audioStyleForLens` seam in `src/app/` is still the
+synth path; the engine now exports `createSampledStreamFromUrl`, so closing that
+seam is one call in the app layer, which a parallel stream owns. Not touched here.
+
+**NEXT:** Shambu's ear on the two clips, and a ruling on the LUFS/peak conflict.
+HALT.

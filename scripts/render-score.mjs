@@ -35,6 +35,14 @@ import {
   WEATHER_OCTAVE_SHIFT,
   MASTER,
 } from './lib/mixlaw.mjs';
+import { buildSchedule } from './lib/schedule.mjs';
+import {
+  applyEqLane,
+  glueCompress,
+  integratedLufs,
+  lufsTrimDb,
+  bandLevelDb,
+} from './lib/mastering.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
@@ -84,6 +92,25 @@ function parseArgs(argv) {
   return out;
 }
 
+/**
+ * Give legacy scores the register hint their events were exported without.
+ *
+ * Weather now carries `registerHint: +12` from the mapping layer, so the
+ * separation travels with the score and no renderer has to remember it. But
+ * `docs/a3-score.json` and `docs/a4-score.json` were printed before that field
+ * existed, and reading them through the new path would silently put weather
+ * back in unison with ground — the exact defect the hint was introduced to
+ * kill. So an event without a hint gets the one the renderer used to apply, and
+ * an event WITH a hint is left alone: the score wins wherever it has an opinion.
+ */
+function withRegisterHints(events) {
+  return events.map((event) =>
+    event.role === 'weather' && event.registerHint === undefined
+      ? { ...event, registerHint: WEATHER_OCTAVE_SHIFT }
+      : event,
+  );
+}
+
 /** Pull the event list + nominal length out of either score section shape. */
 function readSection(score, name) {
   const section = score[name];
@@ -93,7 +120,7 @@ function readSection(score, name) {
   const events = section.window?.events ?? section.events;
   if (!Array.isArray(events)) throw new Error(`section "${name}" has no events array`);
   const seconds = section.sessionSeconds ?? section.seconds ?? section.window?.toSeconds ?? 0;
-  return { events, seconds };
+  return { events: withRegisterHints(events), seconds };
 }
 
 /**
@@ -156,28 +183,55 @@ async function renderStems({ sampler, events, lens, fromSeconds, seconds, concur
   let voiceCount = 0;
   const substitutions = new Map();
 
-  for (const event of events) {
-    const start = event.startSeconds - fromSeconds;
-    const end = start + event.durationSeconds;
-    // Keep events that overlap the window at all — a chord that began ten
+  // THE SCHEDULE IS NOT DERIVED HERE. `scripts/lib/schedule.mjs` decides which
+  // instrument voices which note, at what pitch, at what velocity — and the live
+  // Tone graph imports the SAME function. Two implementations that agree today
+  // diverge eventually; one implementation cannot. That includes the register
+  // hint, so the unison guard now travels with the score instead of living in
+  // this file.
+  // No options are passed. The mix law's velocity shaping and the lens's own
+  // shading are the module's defaults, so there is no knob for this renderer and
+  // the live graph to set differently — the failure mode a parity test could
+  // only report after the fact.
+  const schedule = buildSchedule(events, sampler.lenses, sampler.manifest, lens);
+
+  for (const sv of schedule) {
+    const start = sv.startSeconds - fromSeconds;
+    const end = start + sv.durationSeconds;
+    // Keep voices that overlap the window at all — a chord that began ten
     // minutes ago is still sounding, and dropping it would change the harmony.
     if (end < -3 || start > seconds) continue;
-    const role = event.role;
-    if (!ROLES.includes(role)) continue;
+    const role = sv.role;
 
-    // THE UNISON GUARD. The A3 score puts ground and weather both on midi 45;
-    // stacked, they are the "continuous note" and their beating is the "noise".
-    // Until the mapping layer carries a register hint, the renderer lifts
-    // weather an octave and voices it as a whisper.
-    const midi = role === 'weather' ? event.midi + WEATHER_OCTAVE_SHIFT : event.midi;
-
-    const voice = sampler.pick(lens, role, midi);
-    if (voice.instrument !== sampler.lens(lens).roles[role][0].instrument) {
-      const key = `${role}:${voice.instrument}`;
+    const entry = sampler.manifest.instruments[sv.instrument];
+    const sample = entry.samples.find((s) => s.midi === sv.sampleMidi);
+    if (!sample) throw new Error(`schedule names a sample the manifest lacks: ${sv.instrument}/${sv.sampleMidi}`);
+    if (sv.instrument !== sampler.lens(lens).roles[role][0].instrument) {
+      const key = `${role}:${sv.instrument}`;
       substitutions.set(key, (substitutions.get(key) ?? 0) + 1);
     }
 
-    const shaped = { ...event, midi };
+    const voice = {
+      instrument: sv.instrument,
+      sample,
+      shiftSemitones: sv.midi - sv.sampleMidi,
+      rate: sv.rate,
+      kind: sv.kind,
+      loop: entry.loop,
+      attackSeconds: sv.attackSeconds,
+      gainDb: sv.gainDb,
+    };
+    // The schedule has already applied the mix law's velocity shaping and the
+    // B–V tilt, so what reaches the sampler is a note with its level and its
+    // colour decided; `velocityCompress: 1` says "do not shape this twice".
+    const shaped = {
+      midi: sv.midi,
+      amplitude: sv.velocity,
+      durationSeconds: sv.durationSeconds,
+      envelope: sv.envelope,
+      twinkle: sv.twinkle,
+    };
+
     // Only compute the frames that land in the window. A chord voice that has
     // been sustaining since minute two costs sixty seconds, not ten minutes.
     const offset = Math.round(start * sr);
@@ -186,22 +240,16 @@ async function renderStems({ sampler, events, lens, fromSeconds, seconds, concur
     const toFrame = Math.min(total, frames - offset);
     if (toFrame <= fromFrame) continue;
 
-    const shaping = ROLE_SHAPING[role];
     const { buffer } = sampler.render(
       shaped,
       voice,
-      {
-        velocityCompress: shaping.velocityCompress,
-        brightnessTiltDb: shading.tiltDb,
-        neutralBrightness: shading.neutralBrightness,
-        hingeHz: shading.hingeHz,
-      },
+      { velocityCompress: 1, tiltDb: sv.tiltDb, hingeHz: shading.hingeHz },
       fromFrame,
       toFrame,
     );
     voiceCount++;
 
-    const [gl, gr] = panGains(event.pan ?? 0);
+    const [gl, gr] = panGains(sv.pan);
     const [L, R] = stems[role];
     const base = offset + fromFrame;
     const count = active[role];
@@ -234,6 +282,20 @@ async function renderStems({ sampler, events, lens, fromSeconds, seconds, concur
       R[i] *= g;
     }
   }
+
+  // ── THE MASTERING LAW's EQ lanes ─────────────────────────────────────────
+  // Applied to the dry stem, BEFORE the sends: the carve is a mix decision
+  // about where a role lives, and the reverb tail should inherit the carved
+  // sound rather than smearing the uncarved one back over the top of it.
+  //
+  // The glue is NOT applied here. Its threshold is an absolute level, and at
+  // this point the stem has not yet been trimmed onto the mix law's target —
+  // the first attempt compressed a figuration stem sitting 12 dB below where it
+  // would end up, so the compressor never engaged and the law was satisfied on
+  // paper by a device that was switched off. Glue happens after the fader, in
+  // `render()`, which is also where the live graph has it.
+  const lensDefinition = sampler.lens(lens);
+  for (const role of ROLES) applyEqLane(stems[role], sr, lensDefinition.eq?.[role]);
 
   // Per-role space, then the 38 Hz highpass — applied per stem so that what we
   // measure is exactly what gets summed.
@@ -402,6 +464,8 @@ export async function render(options) {
   const master = [new Float32Array(frames), new Float32Array(frames)];
   const measured = {};
   const measuredRaw = {};
+  const glueConfig = sampler.lenses.mastering?.figurationGlue;
+  let glueDb = 0;
   for (const role of ROLES) {
     measuredRaw[role] = measureStem(stems[role]);
     const g = dbToGain(trims[role]);
@@ -409,6 +473,14 @@ export async function render(options) {
     for (let i = 0; i < frames; i++) {
       L[i] *= g;
       R[i] *= g;
+    }
+    // Glue on FIGURATION ONLY, after the fader so its threshold means what it
+    // says, and before the sum so what gets measured is what gets printed. The
+    // macro arc is the composition — nothing else on this bus is compressed.
+    if (role === 'figuration' && glueConfig) {
+      glueDb = glueCompress(stems[role], SAMPLE_RATE, glueConfig);
+    }
+    for (let i = 0; i < frames; i++) {
       master[0][i] += L[i];
       master[1][i] += R[i];
     }
@@ -417,6 +489,7 @@ export async function render(options) {
 
   const rawPeak = Math.max(peak(master[0]), peak(master[1]));
   const rawPeakDbfs = rawPeak > 0 ? 20 * Math.log10(rawPeak) : -Infinity;
+  const rawLufs = integratedLufs(master, SAMPLE_RATE);
 
   // ── the master fader ────────────────────────────────────────────────────
   // The stems are ON the law — measured at the stem bus, which is where the law
@@ -431,17 +504,27 @@ export async function render(options) {
   // fails on how BUSY it is rather than on peak alone.
   // An explicit trim lets a whole audition set share one fader, so five clips
   // of the same score can be A/B'd without the quietest-peaking lens being
-  // flattered and the peakiest punished. Measured on the A3 birth score, the
-  // five lenses' stem buses sit within 1 dB of each other; per-clip peak
-  // normalisation alone would have printed them 9 dB apart, which says more
-  // about crest factor than about the music.
+  // flattered and the peakiest punished.
+  //
+  // SLICE B1 — THE MASTERING LAW replaces the peak move with a LOUDNESS move.
+  // Peak normalisation rewards crest factor rather than level: measured on the
+  // A3 birth score the five lenses' stem buses sit within 1 dB of each other
+  // and yet peak-normalising printed them 9 dB apart, which says more about
+  // transients than about the music. The fader now lands the mix on its LUFS
+  // target, and a peak guard is applied ON TOP so a loud-but-spiky window
+  // cannot ask for more headroom than exists.
+  const lufsTarget =
+    (sampler.lenses.mastering?.lufsTargets ?? {})[opts.section === 'birth' ? 'birthSky' : 'tonight'] ??
+    -18;
+  const loudnessTrimDb = lufsTrimDb(lufsTarget, rawLufs);
+  const peakCeilingTrimDb = Number.isFinite(rawPeakDbfs)
+    ? MASTER.limiterCeilingDbfs - rawPeakDbfs
+    : 0;
   const masterTrimDb =
     opts.masterTrimDb != null && Number.isFinite(opts.masterTrimDb)
       ? opts.masterTrimDb
-      : Number.isFinite(rawPeakDbfs)
-        ? Math.min(0, MASTER.limiterCeilingDbfs - rawPeakDbfs)
-        : 0;
-  if (masterTrimDb < 0) {
+      : Math.min(loudnessTrimDb, peakCeilingTrimDb);
+  if (masterTrimDb !== 0) {
     const g = dbToGain(masterTrimDb);
     for (let i = 0; i < frames; i++) {
       master[0][i] *= g;
@@ -451,6 +534,31 @@ export async function render(options) {
   const limiting = limitStereo(master[0], master[1], SAMPLE_RATE, MASTER.limiterCeilingDbfs);
   const masterPeak = Math.max(peak(master[0]), peak(master[1]));
   const masterPeakDbfs = masterPeak > 0 ? 20 * Math.log10(masterPeak) : -Infinity;
+  const masterLufs = integratedLufs(master, SAMPLE_RATE);
+
+  // What the EQ lanes claim, MEASURED IN THE AUDIO.
+  //
+  // The first version of this asked "how much of a pad's energy sits in the
+  // motion band, relative to its own level", and it was the wrong question: a
+  // violin section genuinely has most of its energy at 700–5000 Hz, so the
+  // number said "muddy" about a mix that was fine and would have said the same
+  // however deep the carve went.
+  //
+  // The claim the lanes actually make is comparative — IN THE BAND WHERE THE
+  // FIGURATION SINGS, THE FIGURATION IS IN FRONT — so that is what gets
+  // measured: each stem's level inside the motion band, and how far figuration
+  // leads each pad there.
+  const overlap = sampler.lenses.mastering?.spectralOverlap;
+  const motionBandDb = {};
+  const motionLeadDb = {};
+  if (overlap) {
+    for (const role of ROLES) {
+      motionBandDb[role] = bandLevelDb(stems[role], SAMPLE_RATE, overlap.figurationBandHz);
+    }
+    for (const pad of ['ground', 'chord']) {
+      motionLeadDb[pad] = motionBandDb.figuration - motionBandDb[pad];
+    }
+  }
 
   return {
     sampler,
@@ -471,13 +579,57 @@ export async function render(options) {
     master,
     frames,
     rawPeakDbfs,
+    rawLufs,
+    lufsTarget,
     masterTrimDb,
+    loudnessTrimDb,
+    peakCeilingTrimDb,
     limitedDb: limiting.maxDb,
     limiterBusyFraction: limiting.busyFraction,
     masterPeakDbfs,
+    masterLufs,
+    glueDb,
+    motionBandDb,
+    motionLeadDb,
     voiceCount: printed.voiceCount,
     substitutions: Object.fromEntries(printed.substitutions),
   };
+}
+
+/**
+ * Write what the renderer MEASURED where the live app can read it.
+ *
+ * The mix law is stated as measured stem levels. This renderer can satisfy that
+ * directly — render, measure, trim. A live graph cannot: it has not played the
+ * music yet, and metering the bus to chase a target is a compressor wearing a
+ * disguise, which would flatten the very macro arc Slice A4 exists to shape.
+ *
+ * So the measurement is written down and the live graph reads it. One
+ * measurement, two consumers — the same arrangement `schedule.mjs` makes for
+ * the notes. Merged rather than overwritten, so calibrating one lens does not
+ * silently un-calibrate the other four.
+ */
+export function writeCalibration(result) {
+  const file = path.join(ROOT, 'public', 'samples', 'calibration.json');
+  const existing = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : { lenses: {} };
+  existing.generatedBy = 'scripts/render-score.mjs';
+  existing._doc = [
+    'MEASURED, not authored. `render-score.mjs` renders each stem, reads its',
+    'steady-state level, and records the trim that lands it on THE MIX LAW.',
+    'The live graph (src/engine/audio/sampledStream.ts) applies these as static',
+    'faders, because live audio cannot measure what it has not yet played.',
+    'Regenerate with `npm run render -- --lens <id>`.',
+  ];
+  existing.lenses = existing.lenses ?? {};
+  existing.lenses[result.lens] = {
+    stemTrimDb: result.trims,
+    // Unity-master loudness: what the mix arrives at BEFORE the master fader,
+    // which is the number the live graph needs to work out its own fader.
+    measuredLufs: Number.isFinite(result.rawLufs) ? Number(result.rawLufs.toFixed(2)) : -18,
+    measuredOn: `${path.relative(ROOT, result.score)} · ${result.section}`,
+  };
+  fs.writeFileSync(file, `${JSON.stringify(existing, null, 2)}\n`);
+  return file;
 }
 
 async function main() {
@@ -533,10 +685,23 @@ async function main() {
     );
   }
   console.log(
-    `\n  master ${r.masterPeakDbfs.toFixed(1)} dBFS peak · stem bus summed to ` +
-      `${r.rawPeakDbfs.toFixed(1)} · master fader ${r.masterTrimDb.toFixed(1)} dB · ` +
+    `\n  master ${r.masterLufs.toFixed(1)} LUFS (target ${r.lufsTarget}) · ` +
+      `${r.masterPeakDbfs.toFixed(1)} dBFS peak · fader ${r.masterTrimDb.toFixed(1)} dB ` +
+      `(loudness ${r.loudnessTrimDb.toFixed(1)}, peak guard ${r.peakCeilingTrimDb.toFixed(1)})`,
+  );
+  console.log(
+    `  figuration glue ${r.glueDb.toFixed(2)} dB worst · ` +
       `limiter active ${(r.limiterBusyFraction * 100).toFixed(2)}% (worst ${r.limitedDb.toFixed(1)} dB)`,
   );
+  if (Object.keys(r.motionBandDb).length) {
+    const levels = ROLES.map((role) => `${role} ${r.motionBandDb[role].toFixed(1)}`).join(' · ');
+    console.log(`  in the motion band (dBFS): ${levels}`);
+    console.log(
+      `  figuration leads ground by ${r.motionLeadDb.ground.toFixed(1)} dB, ` +
+        `chord by ${r.motionLeadDb.chord.toFixed(1)} dB there`,
+    );
+  }
+  console.log(`  calibration written to ${path.relative(ROOT, writeCalibration(r))}`);
   if (Object.keys(r.substitutions).length) {
     console.log(`  fallback voicings: ${JSON.stringify(r.substitutions)}`);
   }

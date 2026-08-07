@@ -1,0 +1,67 @@
+{
+  "lenses": {
+    "aurora": {
+      "stemTrimDb": {
+        "ground": 1.0059093424273158,
+        "chord": -0.8997207646977685,
+        "figuration": 11.828366868194887,
+        "lead": 13.73550470048933,
+        "weather": -4.89055103993692
+      },
+      "measuredLufs": -12.95,
+      "measuredOn": "docs/a3-score.json · birth"
+    },
+    "embrace": {
+      "stemTrimDb": {
+        "ground": 0.9362842839308634,
+        "chord": -0.7129904988977742,
+        "figuration": 11.232436579876314,
+        "lead": 22.89462986804294,
+        "weather": 0.2740297461767085
+      },
+      "measuredLufs": -13.63,
+      "measuredOn": "docs/a3-score.json · birth"
+    },
+    "sonata": {
+      "stemTrimDb": {
+        "ground": 0.9567609567591724,
+        "chord": -0.6511772623376402,
+        "figuration": 13.832864790393316,
+        "lead": -2.7468688341071292,
+        "weather": -4.889159217066769
+      },
+      "measuredLufs": -13.14,
+      "measuredOn": "docs/a3-score.json · birth"
+    },
+    "pulse": {
+      "stemTrimDb": {
+        "ground": 1.0242693554450604,
+        "chord": 8.371653315456513,
+        "figuration": 12.533461120174326,
+        "lead": 18.46033204651433,
+        "weather": 2.4013353338040417
+      },
+      "measuredLufs": -13.15,
+      "measuredOn": "docs/a3-score.json · birth"
+    },
+    "ground": {
+      "stemTrimDb": {
+        "ground": 0.9243187119897414,
+        "chord": 7.641540865142318,
+        "figuration": 19.8239049955209,
+        "lead": 20.39642848570203,
+        "weather": -0.8276664892257912
+      },
+      "measuredLufs": -12.76,
+      "measuredOn": "docs/a3-score.json · birth"
+    }
+  },
+  "generatedBy": "scripts/render-score.mjs",
+  "_doc": [
+    "MEASURED, not authored. `render-score.mjs` renders each stem, reads its",
+    "steady-state level, and records the trim that lands it on THE MIX LAW.",
+    "The live graph (src/engine/audio/sampledStream.ts) applies these as static",
+    "faders, because live audio cannot measure what it has not yet played.",
+    "Regenerate with `npm run render -- --lens <id>`."
+  ]
+}

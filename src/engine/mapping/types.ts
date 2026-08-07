@@ -93,6 +93,18 @@ export interface MusicalEvent {
    * carried it — a chord voice can sustain for tens of minutes.
    */
   durationSeconds: number;
+  /**
+   * Semitones a renderer MUST transpose this event by when voicing it, so roles
+   * cannot collide in register.
+   *
+   * Weather carries +12. On 2026-08-07 stem forensics found ground and weather
+   * both emitting midi 45 for a whole session: two roles stacked on one pitch is
+   * the "continuous note" Shambu heard, and their mutual detune-beating is the
+   * "noise". The renderer patched it by transposing weather itself, but a patch
+   * in one renderer is not a fix — the next renderer would repeat it. Carrying
+   * the hint on the event means the separation travels with the score.
+   */
+  registerHint?: number;
   /** Slow amplitude curve over the event's life, for swelling chord voices. */
   envelope?: AmplitudeBreakpoint[];
   /** Groups a statement with its answer (Slice A1b). */

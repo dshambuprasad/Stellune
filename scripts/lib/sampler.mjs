@@ -199,8 +199,15 @@ export class OfflineSampler {
     const lfoPhase = ((event.midi * 37) % 360) * (Math.PI / 180);
 
     // B–V shading: a one-pole shelf around `hingeHz`.
+    //
+    // `opts.tiltDb` is the Slice B1 path — the shared schedule has already
+    // worked the tilt out from the star's colour, and passing it in is what
+    // keeps this renderer and the live graph shading the same note by the same
+    // amount. The `brightnessTiltDb` form is the older one, kept for callers
+    // that hand over a raw event.
     const brightness = event.timbre?.brightness ?? 0.5;
-    const tiltDb = opts.brightnessTiltDb * (brightness - (opts.neutralBrightness ?? 0.5)) * 2;
+    const tiltDb =
+      opts.tiltDb ?? (opts.brightnessTiltDb ?? 0) * (brightness - (opts.neutralBrightness ?? 0.5)) * 2;
     const hfGain = 10 ** (tiltDb / 20);
     const alpha = Math.exp((-2 * Math.PI * opts.hingeHz) / sr);
     let lp = 0;

@@ -332,6 +332,7 @@ function continuousEvents(plan: SessionPlan, from: number, to: number): MusicalE
       sourceId: 'weather',
       role: 'weather',
       midi: plan.rootMidi,
+      registerHint: WEATHER_REGISTER_HINT,
       amplitude: 1,
       pan: 0,
       timbre: { warmth: 0.5, brightness: 0.5 },
@@ -371,6 +372,15 @@ function sampledWeather(plan: SessionPlan, pieceSeconds: number): SkyWeather {
   plan.weatherCache.set(bucket, measured);
   return measured;
 }
+
+/**
+ * How far weather sits above ground, in semitones.
+ *
+ * Both roles are voiced from the session root, so without this they land in
+ * unison. An octave is the smallest separation that reads as a different voice
+ * rather than a detuned copy of the same one.
+ */
+export const WEATHER_REGISTER_HINT = 12;
 
 const ROLE_ORDER: Record<MusicalEvent['role'], number> = {
   ground: 0,

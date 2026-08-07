@@ -6,12 +6,21 @@
  *
  *   npm run dev  →  http://localhost:5173/harness.html
  *
- * Slice A2 (the audition): plays the LIVING stream — the windowed score from the
- * mapping layer, scheduled through the existing Phase 3.5 palette. Rough
- * clothing on real structure; the point is to judge the music's bones.
+ * SLICE B1 — the sampled audition. Until now this played the Phase 3.5 synth
+ * palette over the real score: right notes, placeholder clothing. It now plays
+ * the SAMPLED instruments through the mood lenses, under the mix law and the
+ * mastering law, from the same schedule the offline renderer prints. What you
+ * hear here and what `npm run render` writes are the same piece, voiced the
+ * same way.
  *
- * "Play" must be clicked: browsers keep the audio context suspended until a real
- * user gesture, and that is exactly the constraint the engine documents.
+ * What the harness is for, and why it shows its working: the mix law was
+ * ratified after a render shipped with its hierarchy inverted and nobody could
+ * see it. So the stem meters are on screen while it plays, and the panel says
+ * out loud whether the mix is running on a real measurement or on the
+ * documented fallback.
+ *
+ * "Play" must be clicked: browsers keep the audio context suspended until a
+ * real user gesture, and that is exactly the constraint the engine documents.
  */
 
 import '../style.css';
@@ -23,15 +32,15 @@ import {
   type SessionPlan,
 } from '../engine/mapping/index.ts';
 import {
-  createStreamEngine,
-  renderStreamOffline,
-  type AudioStyle,
-  type StreamEngine,
+  STEM_TARGETS_DBFS,
+  createSampledStreamFromUrl,
+  loadSampleCatalogue,
+  type LensConfig,
+  type SampledStream,
 } from '../engine/audio/index.ts';
-import { encodeWav } from './wav.ts';
 
-/** The fixed sample sky: Bengaluru, 1993-08-01, local midnight. */
-const BENGALURU: ObserverInput = {
+/** The birth sky: Bengaluru, 1 August 1993, local midnight. */
+const BIRTH_SKY: ObserverInput = {
   latitude: 12.9719,
   longitude: 77.5937,
   dateISO: '1993-08-01',
@@ -39,13 +48,25 @@ const BENGALURU: ObserverInput = {
   tzOffsetMinutes: 330,
 };
 
-type AnchorRule = LivingSkyConfig['openingAnchorRule'];
+/**
+ * Tonight, from the same place.
+ *
+ * Read from the machine's clock at load. The harness is a dev tool and this is
+ * the one place a clock is allowed near this project — the mapping layer stays
+ * pure, and the session it is handed is a plain observer record like any other.
+ */
+function tonight(): ObserverInput {
+  const now = new Date();
+  return {
+    latitude: 12.9719,
+    longitude: 77.5937,
+    dateISO: now.toISOString().slice(0, 10),
+    timeMinutes: now.getHours() * 60 + now.getMinutes(),
+    tzOffsetMinutes: -now.getTimezoneOffset(),
+  };
+}
 
-const params = new URLSearchParams(location.search);
-const readNumber = (key: string, fallback: number): number => {
-  const value = Number(params.get(key));
-  return Number.isFinite(value) && value > 0 ? value : fallback;
-};
+type AnchorRule = LivingSkyConfig['openingAnchorRule'];
 
 const root = document.querySelector<HTMLDivElement>('#harness');
 if (!root) throw new Error('harness: #harness container missing');
@@ -53,16 +74,15 @@ if (!root) throw new Error('harness: #harness container missing');
 root.innerHTML = `
   <main class="shell harness">
     <h1>Cosmophony</h1>
-    <p class="tagline">Slice A2 audition — the living sky, Bengaluru, 1 August 1993</p>
+    <p class="tagline">Slice B1 audition — sampled instruments, live, through the mood lenses</p>
     <p class="status" id="status">Loading the catalogue…</p>
 
     <div class="controls">
-      <label>mode
-        <select id="mode">
-          <option value="birth-sky">birth-sky</option>
-          <option value="endless">endless</option>
-        </select>
-      </label>
+      <span class="tabs" id="sky" role="tablist">
+        <button type="button" id="sky-birth" role="tab" aria-selected="true">Birth Sky · 1 Aug 1993</button>
+        <button type="button" id="sky-tonight" role="tab" aria-selected="false">Tonight</button>
+      </span>
+      <label>lens<select id="lens"></select></label>
       <label>anchor
         <select id="anchor">
           <option value="bookends">bookends</option>
@@ -70,22 +90,16 @@ root.innerHTML = `
           <option value="brightest">brightest</option>
         </select>
       </label>
-      <label>style
-        <select id="style">
-          <option value="lush">lush</option>
-          <option value="subtle">subtle</option>
-        </select>
-      </label>
-      <label>from&nbsp;(s)<input id="from" type="number" value="0" min="0" step="10" /></label>
+      <label>from&nbsp;(s)<input id="from" type="number" value="0" min="0" step="30" /></label>
     </div>
 
     <div class="controls">
       <button id="play" type="button" disabled>Play</button>
       <button id="stop" type="button" disabled>Stop</button>
-      <button id="render" type="button" disabled>Render WAV</button>
     </div>
 
     <pre class="score" id="plan"></pre>
+    <pre class="levels" id="mix"></pre>
     <pre class="levels" id="levels"></pre>
 
     <p class="honesty">
@@ -106,23 +120,31 @@ const el = <T extends HTMLElement>(id: string): T => {
 const status = el('status');
 const playButton = el<HTMLButtonElement>('play');
 const stopButton = el<HTMLButtonElement>('stop');
-const renderButton = el<HTMLButtonElement>('render');
-const modeSelect = el<HTMLSelectElement>('mode');
+// Two buttons rather than a <select>: the choice is binary, and it reads as a
+// choice rather than as a list to open.
+const skyBirth = el<HTMLButtonElement>('sky-birth');
+const skyTonight = el<HTMLButtonElement>('sky-tonight');
+const lensSelect = el<HTMLSelectElement>('lens');
 const anchorSelect = el<HTMLSelectElement>('anchor');
-const styleSelect = el<HTMLSelectElement>('style');
 const fromInput = el<HTMLInputElement>('from');
 
 let catalog: Star[] = [];
-let engine: StreamEngine | undefined;
-let levelsTimer: number | undefined;
+let lenses: LensConfig | null = null;
+let stream: SampledStream | undefined;
+let metersTimer: number | undefined;
+let dropped = 0;
 
-const currentConfig = (): Partial<LivingSkyConfig> => ({
-  mode: modeSelect.value as LivingSkyConfig['mode'],
-  openingAnchorRule: anchorSelect.value as AnchorRule,
-  ...(modeSelect.value === 'endless' ? { kappa: 30 } : {}),
-});
+const isBirthSky = (): boolean => skyBirth.getAttribute('aria-selected') === 'true';
+const observer = (): ObserverInput => (isBirthSky() ? BIRTH_SKY : tonight());
 
-const currentStyle = (): AudioStyle => (styleSelect.value === 'subtle' ? 'subtle' : 'lush');
+/**
+ * Tonight is the endless mode — there is no birth moment to build an arc
+ * toward, so the shape follows the sky itself (MUSICAL_VISION §4).
+ */
+const currentConfig = (): Partial<LivingSkyConfig> =>
+  isBirthSky()
+    ? { mode: 'birth-sky', openingAnchorRule: anchorSelect.value as AnchorRule }
+    : { mode: 'endless', openingAnchorRule: anchorSelect.value as AnchorRule, kappa: 30 };
 
 function describe(plan: SessionPlan): string {
   const name = (id: string | null): string =>
@@ -144,106 +166,168 @@ function describe(plan: SessionPlan): string {
   ].join('\n');
 }
 
+/**
+ * The mix law, on screen while it plays.
+ *
+ * Each role's measured level next to its ratified target. This is the thing
+ * that was missing when the v1 render shipped inverted — the numbers existed,
+ * nobody was looking at them, and it took stem forensics after the fact.
+ */
+function mixPanel(): string {
+  if (!stream) return '';
+  const stems = stream.getStemLevels();
+  const rows = (['ground', 'chord', 'figuration', 'lead', 'weather'] as const).map((role) => {
+    const measured = stems[role] ?? -Infinity;
+    const target = STEM_TARGETS_DBFS[role];
+    const bar = '█'.repeat(Math.max(0, Math.round((measured + 60) / 3)));
+    return `  ${role.padEnd(11)}${measured > -60 ? measured.toFixed(1).padStart(6) : '   —  '} ` +
+      `(target ${String(target).padStart(4)})  ${bar}`;
+  });
+  const master = stems.master ?? -Infinity;
+  return [
+    `mix law — ${stream.calibrated ? 'measured trims' : 'FALLBACK trims (run `npm run calibrate`)'}` +
+      '   [a display, not the instrument: check:mix-law measures the rendered audio]',
+    ...rows,
+    `  ${'master'.padEnd(11)}${master > -60 ? master.toFixed(1).padStart(6) : '   —  '}` +
+      `   limiter ${(stems.limiterDb ?? 0).toFixed(2)} dB` +
+      `   t=${stream.playheadSeconds().toFixed(0)}s` +
+      (dropped > 0 ? `   ${dropped} note(s) dropped while loading` : ''),
+  ].join('\n');
+}
+
 function refresh(): void {
-  const plan = prepareSession(catalog, BENGALURU, currentConfig());
+  const plan = prepareSession(catalog, observer(), currentConfig());
   el('plan').textContent = describe(plan);
-  status.textContent = 'Ready. Click Play (a user gesture is required to start audio).';
+  if (!stream) {
+    status.textContent = 'Ready. Click Play (a user gesture is required to start audio).';
+  }
 }
 
 function teardown(): void {
-  if (levelsTimer !== undefined) window.clearInterval(levelsTimer);
-  levelsTimer = undefined;
-  engine?.stop();
-  engine?.dispose();
-  engine = undefined;
+  if (metersTimer !== undefined) window.clearInterval(metersTimer);
+  metersTimer = undefined;
+  stream?.stop();
+  stream?.dispose();
+  stream = undefined;
+  dropped = 0;
   playButton.disabled = false;
   stopButton.disabled = true;
+  el('mix').textContent = '';
+  el('levels').textContent = '';
 }
 
 async function main(): Promise<void> {
   catalog = await loadStarCatalog();
+  const catalogue = await loadSampleCatalogue('/samples');
+  lenses = catalogue.lenses;
+
+  for (const [id, lens] of Object.entries(lenses.lenses)) {
+    const option = document.createElement('option');
+    option.value = id;
+    option.textContent = `${lens.title} — ${lens.palette}`;
+    lensSelect.append(option);
+  }
+  lensSelect.value = lenses.defaults.birthSky;
+
   refresh();
-
   playButton.disabled = false;
-  renderButton.disabled = false;
 
-  for (const control of [modeSelect, anchorSelect, styleSelect]) {
-    control.addEventListener('change', () => {
+  // Changing the sky or the anchor is a different piece, so it tears down.
+  for (const [button, other] of [
+    [skyBirth, skyTonight],
+    [skyTonight, skyBirth],
+  ] as const) {
+    button.addEventListener('click', () => {
+      button.setAttribute('aria-selected', 'true');
+      other.setAttribute('aria-selected', 'false');
+      if (lenses) {
+        lensSelect.value = isBirthSky() ? lenses.defaults.birthSky : lenses.defaults.tonight;
+      }
       teardown();
       refresh();
     });
   }
+  anchorSelect.addEventListener('change', () => {
+    teardown();
+    refresh();
+  });
+
+  // Changing the LENS does not. That is the whole claim: same notes, same
+  // times, different clothing — applied from the next window, with a dip
+  // across the seam, without stopping the music.
+  lensSelect.addEventListener('change', () => {
+    if (!stream) return;
+    const lensId = lensSelect.value;
+    status.textContent = `Loading ${lensId}…`;
+    void stream
+      .setLens(lensId)
+      .then(() => {
+        status.textContent = `Lens → ${lensId}. It changes from the next window; the notes do not move.`;
+      })
+      .catch((error: unknown) => {
+        status.textContent = `Lens change failed: ${error instanceof Error ? error.message : String(error)}`;
+      });
+  });
 
   playButton.addEventListener('click', () => {
-    const plan = prepareSession(catalog, BENGALURU, currentConfig());
-    engine = createStreamEngine(plan, { style: currentStyle() });
+    playButton.disabled = true;
+    const plan = prepareSession(catalog, observer(), currentConfig());
     const from = Number(fromInput.value) || 0;
+    status.textContent = 'Loading instruments…';
 
-    void engine.play(from).then(() => {
-      status.textContent = `Playing from ${from}s. The sky is turning.`;
-      playButton.disabled = true;
-      stopButton.disabled = false;
-      levelsTimer = window.setInterval(() => {
-        const levels = engine?.getLevels() ?? new Float32Array(0);
-        const sources = engine?.getLevelSources() ?? [];
-        const shown = [...levels]
-          .map((v, i) => ({ v, id: sources[i] ?? '?' }))
-          .filter((x) => x.v > 0.002)
-          .sort((a, b) => b.v - a.v)
-          .slice(0, 10);
-        el('levels').textContent =
-          'sounding  ' +
-          shown
-            .map((x) => `${catalog.find((s) => s.id === x.id)?.name ?? x.id}:${x.v.toFixed(3)}`)
-            .join('  ');
-      }, 120);
-    });
+    void createSampledStreamFromUrl(plan, {
+      lensId: lensSelect.value,
+      onProgress: (loaded, total) => {
+        // Only while the FIRST lens is loading. A lens swap loads its
+        // fall-through tier in the background long after the swap has
+        // happened, and letting that overwrite the status made the harness
+        // claim it was still loading while it was plainly playing.
+        if (!stream) status.textContent = `Loading instruments… ${loaded}/${total}`;
+      },
+      onDropped: () => {
+        dropped += 1;
+      },
+    })
+      .then(async (created) => {
+        stream = created;
+        // DEV ONLY: the live player, reachable from the console.
+        //
+        // `scheduleFor()` is how the lens-invariance claim is checked against
+        // the LIVE path rather than only against the pure module — swap the
+        // lens, ask for the same span, and the notes and their times must be
+        // identical. Handy enough to keep; the harness is not shipped.
+        (window as unknown as { cosmophony?: unknown }).cosmophony = created;
+        await created.play(from);
+        status.textContent =
+          `Playing ${lensSelect.value} from ${from}s. The sky is turning.` +
+          (created.calibrated ? '' : '  ⚠ uncalibrated mix — run `npm run calibrate`.');
+        stopButton.disabled = false;
+
+        metersTimer = window.setInterval(() => {
+          el('mix').textContent = mixPanel();
+          const levels = stream?.getLevels() ?? new Float32Array(0);
+          const sources = stream?.levelSources() ?? [];
+          const shown = [...levels]
+            .map((v, i) => ({ v, id: sources[i] ?? '?' }))
+            .filter((x) => x.v > 0.002)
+            .sort((a, b) => b.v - a.v)
+            .slice(0, 10);
+          el('levels').textContent =
+            'sounding  ' +
+            shown
+              .map((x) => `${catalog.find((s) => s.id === x.id)?.name ?? x.id}:${x.v.toFixed(3)}`)
+              .join('  ');
+        }, 150);
+      })
+      .catch((error: unknown) => {
+        status.textContent = `Failed: ${error instanceof Error ? error.message : String(error)}`;
+        playButton.disabled = false;
+      });
   });
 
   stopButton.addEventListener('click', () => {
     teardown();
     status.textContent = 'Stopped.';
-  });
-
-  renderButton.addEventListener('click', () => {
-    renderButton.disabled = true;
-    const from = Number(fromInput.value) || 0;
-    const seconds = readNumber('seconds', 150);
-    const name =
-      params.get('name') ??
-      `a2-${modeSelect.value}-${anchorSelect.value}-${styleSelect.value}-${from}s.wav`;
-    status.textContent = `Rendering ${seconds}s from ${from}s offline…`;
-
-    const plan = prepareSession(catalog, BENGALURU, currentConfig());
-    const sampleRate = readNumber('rate', 32000);
-    void renderStreamOffline(plan, from, from + seconds, { style: currentStyle(), sampleRate })
-      .then(async (buffer) => {
-        const blob = encodeWav(buffer);
-        const size = `${(blob.size / 1024).toFixed(0)} KB`;
-        try {
-          const response = await fetch('/__save-clip', {
-            method: 'POST',
-            headers: { 'x-clip-name': name },
-            body: blob,
-          });
-          if (!response.ok) throw new Error(`server answered ${response.status}`);
-          const saved = (await response.json()) as { path: string };
-          status.textContent = `Rendered ${seconds}s → ${saved.path} (${size}).`;
-        } catch {
-          const url = URL.createObjectURL(blob);
-          const link = document.createElement('a');
-          link.href = url;
-          link.download = name;
-          link.click();
-          URL.revokeObjectURL(url);
-          status.textContent = `Rendered ${seconds}s → downloaded ${name} (${size}).`;
-        }
-        renderButton.disabled = false;
-      })
-      .catch((error: unknown) => {
-        status.textContent = `Render failed: ${error instanceof Error ? error.message : String(error)}`;
-        renderButton.disabled = false;
-      });
   });
 }
 

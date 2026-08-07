@@ -73,3 +73,60 @@ export {
 // Slice A2 — streaming audio
 export type { StreamEngine, StreamEngineOptions } from './audio/index.ts';
 export { createStreamEngine, renderStreamOffline } from './audio/index.ts';
+
+// ---------------------------------------------------------------------------
+// Living Sky — the evolving stream (Slices A1a–A4)
+//
+// Re-exported here because `app/` depends on this surface, not on the layers:
+// the harness and the star field both need to prepare a session and render a
+// window, and neither should have to know which module inside `mapping/` those
+// live in.
+// ---------------------------------------------------------------------------
+
+export type {
+  VoiceRole,
+  EventOrigin,
+  AmplitudeBreakpoint,
+  SessionMode,
+  ArcStage,
+  ArcState,
+  SkyWeather,
+  ScoreWindow,
+  LivingSkyConfig,
+  SessionPlan,
+  ChordStarPlan,
+} from './mapping/index.ts';
+export {
+  DEFAULT_LIVING_SKY_CONFIG,
+  resolveConfig,
+  prepareSession,
+  arcAt,
+  renderWindow,
+  WEATHER_REGISTER_HINT,
+  measureWeather,
+  meanWeather,
+  scaleForWeather,
+} from './mapping/index.ts';
+
+export type { MovementPlan, Movement, FormPosition, PatternName } from './mapping/index.ts';
+export { planMovements, formAt, PATTERN_VOCABULARY } from './mapping/index.ts';
+
+// Slice B0/B1 — sampled instruments, mood lenses, and the live player.
+export type {
+  LensConfig,
+  SampleManifest,
+  SampledStream,
+  SampledStreamOptions,
+  MixCalibration,
+} from './audio/index.ts';
+export {
+  LENS_ROLES,
+  createSampledStream,
+  createSampledStreamFromUrl,
+  loadSampleCatalogue,
+  loadCalibration,
+  masteringFor,
+  eqLaneFor,
+  validateEqLanes,
+  isCalibrated,
+} from './audio/index.ts';

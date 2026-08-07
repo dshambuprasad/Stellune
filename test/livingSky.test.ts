@@ -59,6 +59,7 @@ import {
   prepareSession,
   renderWindow,
   soundingChordTones,
+  WEATHER_REGISTER_HINT,
   scaleDegrees,
   subjectKey,
   scaleForWeather,
@@ -1725,6 +1726,62 @@ describe('form — partition invariance re-proven with movements active', () => 
     for (let t = 0; t + 60 <= plan.config.sessionSeconds; t += 5) {
       const inMinute = leads.filter((e) => e.startSeconds >= t && e.startSeconds < t + 60).length;
       expect(inMinute).toBeLessThanOrEqual(budget);
+    }
+  });
+});
+
+// ===========================================================================
+// SLICE B1 (mapping exception) — weather may never sound in unison with ground
+// ===========================================================================
+
+describe('weather register hint', () => {
+  const plan = session({ mode: 'birth-sky' });
+  const events = renderWindow(plan, 0, plan.config.sessionSeconds).events;
+
+  it('marks every weather event with a register hint', () => {
+    const weather = events.filter((e) => e.role === 'weather');
+    expect(weather.length).toBeGreaterThan(0);
+    for (const event of weather) {
+      expect(event.registerHint, 'a weather event carried no register hint').toBe(
+        WEATHER_REGISTER_HINT,
+      );
+    }
+  });
+
+  it('THE GATE — voiced with its hint, weather can never land on ground', () => {
+    // The 2026-08-07 defect: both roles emitted midi 45 for a whole session, and
+    // the renderer had to know to fix it. Now the score says so itself.
+    const ground = events.filter((e) => e.role === 'ground');
+    const weather = events.filter((e) => e.role === 'weather');
+    expect(ground.length).toBeGreaterThan(0);
+
+    for (const w of weather) {
+      const voiced = w.midi + (w.registerHint ?? 0);
+      const overlapping = ground.filter(
+        (g) =>
+          g.startSeconds < w.startSeconds + w.durationSeconds &&
+          g.startSeconds + g.durationSeconds > w.startSeconds,
+      );
+      for (const g of overlapping) {
+        const gap = Math.abs(voiced - (g.midi + (g.registerHint ?? 0)));
+        expect(gap, `weather ${voiced} against ground ${g.midi}`).toBeGreaterThanOrEqual(12);
+      }
+    }
+  });
+
+  it('leaves every other role unhinted, so nothing else is silently moved', () => {
+    for (const event of events.filter((e) => e.role !== 'weather')) {
+      expect(event.registerHint).toBeUndefined();
+    }
+  });
+
+  it('keeps the hint an exact octave, so the pitch class is unchanged', () => {
+    // Anything but a whole octave would break the on-scale guarantee.
+    expect(WEATHER_REGISTER_HINT % 12).toBe(0);
+    const ladder = scaleDegrees(plan.scale);
+    for (const event of events.filter((e) => e.role === 'weather')) {
+      const voiced = event.midi + (event.registerHint ?? 0);
+      expect(ladder.includes(((voiced - plan.rootMidi) % 12 + 12) % 12)).toBe(true);
     }
   });
 });

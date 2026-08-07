@@ -88,6 +88,18 @@ export class SamplerBank {
   readonly #samplers = new Map<string, Tone.Sampler>();
   /** instrument id → the in-flight load, so a second ask does not refetch. */
   readonly #loading = new Map<string, Promise<Tone.Sampler>>();
+  /**
+   * `instrument/midi` → the decoded audio, kept alongside the sampler.
+   *
+   * B1 needed this. A `Tone.Sampler` is ONE node: connecting it to a per-note
+   * panner fans its whole output to that panner, so every note of the role
+   * would land wherever the most recent star happened to be. Azimuth panning is
+   * not decoration — it is how the sky has a shape — so the live player builds
+   * its own source per note and needs the buffer, not the node. The sampler is
+   * still built and still exported; it is simply not the path a panned voice
+   * takes.
+   */
+  readonly #buffers = new Map<string, Tone.ToneAudioBuffer>();
 
   #destination: Tone.InputNode | null = null;
 
@@ -170,11 +182,30 @@ export class SamplerBank {
     return this.#samplers.get(voice.instrument) ?? null;
   }
 
+  /**
+   * The decoded audio for one recorded note, or null if it has not loaded.
+   *
+   * Keyed by instrument and by the MIDI number of the RECORDED note — the
+   * sample the voicing chose, not the pitch being played, which is reached by
+   * resampling.
+   */
+  bufferFor(instrument: string, sampleMidi: number): Tone.ToneAudioBuffer | null {
+    return this.#buffers.get(`${instrument}/${sampleMidi}`) ?? null;
+  }
+
+  /** Has this instrument finished loading? */
+  isLoaded(instrument: string): boolean {
+    return this.#samplers.has(instrument);
+  }
+
   /** Release every sampler and forget everything loaded. */
   dispose(): void {
     for (const sampler of this.#samplers.values()) sampler.dispose();
     this.#samplers.clear();
     this.#loading.clear();
+    // The buffers belong to the samplers that own them; disposing a sampler
+    // releases them, so this only drops our index.
+    this.#buffers.clear();
   }
 
   async #loadInstrument(id: string): Promise<Tone.Sampler> {
@@ -194,18 +225,31 @@ export class SamplerBank {
       urls[sample.note] = this.#format === 'ogg' ? sample.ogg : sample.mp3;
     }
 
+    // Fetch the audio first, then hand the decoded buffers to the sampler. One
+    // download serves both consumers: the sampler for anything that wants a
+    // keyboard, and the buffer index for the live player, which builds its own
+    // source per note so each star can keep its own place in the stereo field.
     const promise = new Promise<Tone.Sampler>((resolve, reject) => {
-      const sampler = new Tone.Sampler({
+      const buffers = new Tone.ToneAudioBuffers({
         urls,
         baseUrl: `${this.#baseUrl}/`,
-        // A sustained instrument holds until released; a struck one rings out
-        // on its own, so its release only shapes an early stop.
-        attack: entry.attackSeconds,
-        release: entry.kind === 'sustained' ? 1.2 : 0.4,
-        curve: 'exponential',
-        // The loudness match, so a fall-through mid-phrase does not lurch.
-        volume: entry.levelDb,
         onload: () => {
+          const loaded: Record<string, Tone.ToneAudioBuffer> = {};
+          for (const sample of entry.samples) {
+            const buffer = buffers.get(sample.note);
+            loaded[sample.note] = buffer;
+            this.#buffers.set(`${id}/${sample.midi}`, buffer);
+          }
+          const sampler = new Tone.Sampler({
+            urls: loaded,
+            // A sustained instrument holds until released; a struck one rings
+            // out on its own, so its release only shapes an early stop.
+            attack: entry.attackSeconds,
+            release: entry.kind === 'sustained' ? 1.2 : 0.4,
+            curve: 'exponential',
+            // The loudness match, so a fall-through mid-phrase does not lurch.
+            volume: entry.levelDb,
+          });
           if (this.#destination) sampler.connect(this.#destination);
           this.#samplers.set(id, sampler);
           this.#loading.delete(id);
@@ -213,7 +257,7 @@ export class SamplerBank {
         },
         onerror: (error) => {
           this.#loading.delete(id);
-          sampler.dispose();
+          buffers.dispose();
           reject(new Error(`failed to load instrument "${id}": ${error.message}`));
         },
       });
