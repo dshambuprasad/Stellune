@@ -28,6 +28,20 @@ import { CARDINALS, clampCamera, fitViewport, project, zenithRadius } from './pr
 import type { RenderStar } from './starStyle.ts';
 import { StarSprites } from './starStyle.ts';
 
+/**
+ * One constellation's stick figure, as polylines of catalogue star ids.
+ *
+ * Ids, not coordinates: `scripts/build-data.mjs` resolved every vertex of
+ * d3-celestial's line set to a star in our own subset at build time, so a line
+ * is drawn between the exact points this renderer has just drawn the stars at.
+ * See `public/data/ATTRIBUTION.md` for the source, its pinned revision and its
+ * BSD-3-Clause notice.
+ */
+export interface ConstellationFigure {
+  id: string;
+  lines: string[][];
+}
+
 const DEG = Math.PI / 180;
 
 /** What the renderer needs to know about the sounding sky, refreshed per frame. */
@@ -62,8 +76,33 @@ interface Tuning {
   magLimit: number;
 }
 
-const FULL: Tuning = { maxRadius: 3.4, minRadius: 0.34, magLimit: 6.6 };
-const LOW: Tuning = { maxRadius: 3.0, minRadius: 0.42, magLimit: 5.2 };
+// Slice B2 widened the radius range along with steepening the curve — see
+// `starStyle.magToScale`. The brightest star is bigger and the faintest is
+// smaller, which is the whole of "first-magnitude stars clearly dominate".
+const FULL: Tuning = { maxRadius: 4.6, minRadius: 0.26, magLimit: 6.6 };
+const LOW: Tuning = { maxRadius: 4.1, minRadius: 0.32, magLimit: 5.2 };
+
+/**
+ * The sizing `toRenderStars` should be given, exported so it cannot drift.
+ *
+ * It was a literal at the call site and was already stale by the time B2
+ * widened the range — harmless only because `toRenderStars` reads the alpha and
+ * not the radius out of `magToScale`. One exported constant instead.
+ */
+export const STAR_TUNING = { maxRadius: FULL.maxRadius, minRadius: FULL.minRadius };
+
+/**
+ * How faint the constellation lines are.
+ *
+ * The brief's word was "well below the stars, visible on a dark screen without
+ * shouting", and that is a real constraint in both directions: a chart-like
+ * line destroys the radical calm, and a line nobody can see is a build step
+ * that produced nothing. This is the alpha at full reveal, before the
+ * horizon-extinction fade that every star also gets.
+ */
+const FIGURE_ALPHA = 0.13;
+/** Lines fade out as their stars near the horizon, exactly as the stars do. */
+const FIGURE_EXTINCTION_DEGREES = 12;
 
 export class Starfield {
   readonly canvas: HTMLCanvasElement;
@@ -89,6 +128,15 @@ export class Starfield {
   #reveal = 0;
 
   #glow: GlowState = EMPTY_GLOW;
+
+  /** The constellation figures, as loaded. Empty until `setFigures`. */
+  #figures: ConstellationFigure[] = [];
+  /** Only the stars that a figure actually touches — ~700 of ~8,800. */
+  #figureStars: RenderStar[] = [];
+  /** Reused per frame: star id → where it was projected. No per-frame alloc. */
+  readonly #figureScreen = new Map<string, { x: number; y: number; extinction: number }>();
+  /** Reused per frame: the stars that earned a standing name and are on screen. */
+  #labelled: Array<{ label: string; x: number; y: number; radius: number; extinction: number }> = [];
 
   /** Rolling frame-time average, exposed for the performance note. */
   #frameMs = 0;
@@ -171,6 +219,36 @@ export class Starfield {
 
   setStars(stars: RenderStar[]): void {
     this.#stars = stars;
+    this.#indexFigureStars();
+  }
+
+  /**
+   * The constellation stick figures. Safe to call before or after `setStars`;
+   * the index is rebuilt either way.
+   */
+  setFigures(figures: ConstellationFigure[]): void {
+    this.#figures = figures;
+    this.#indexFigureStars();
+  }
+
+  /**
+   * Narrow the per-frame figure pass to the stars a figure actually touches.
+   *
+   * Without this the lines would cost a second full sweep of the catalogue
+   * every frame to find ~700 stars. With it the extra pass is under a tenth of
+   * the main loop, which is what lets the lines exist at all inside the 16 ms
+   * budget the module header commits to.
+   */
+  #indexFigureStars(): void {
+    if (this.#figures.length === 0 || this.#stars.length === 0) {
+      this.#figureStars = [];
+      return;
+    }
+    const wanted = new Set<string>();
+    for (const figure of this.#figures) {
+      for (const line of figure.lines) for (const id of line) wanted.add(id);
+    }
+    this.#figureStars = this.#stars.filter((rs) => wanted.has(rs.star.id));
   }
 
   setObserver(latitudeDeg: number): void {
@@ -247,9 +325,17 @@ export class Starfield {
     const magLimit = this.#tuning.magLimit;
     const reveal = this.#reveal;
 
+    // The figures go UNDER the stars, in both senses: drawn first, so a star
+    // composites on top of its own lines, and faint enough that the sky is
+    // still a sky. `lighter` is deliberately not used here — additive strokes
+    // brighten where lines cross, and every crossing would become a knot.
+    this.#projectFigureStars(originX, originY, scale, sinLat, cosLat, lst, view);
+    this.#paintFigures(ctx, reveal);
+
     ctx.globalCompositeOperation = 'lighter';
 
     let drawn = 0;
+    this.#labelled.length = 0;
     this.#leadScreen = null;
     for (const rs of this.#stars) {
       if (rs.star.mag > magLimit) continue;
@@ -300,6 +386,12 @@ export class Starfield {
         this.#leadScreen = { x, y };
       }
 
+      // Collected, not drawn: text is `source-over` and the field is `lighter`,
+      // and a name is only worth reading once the sky behind it is finished.
+      if (rs.label !== null) {
+        this.#labelled.push({ label: rs.label, x, y, radius: half, extinction });
+      }
+
       drawn++;
     }
 
@@ -307,10 +399,136 @@ export class Starfield {
     ctx.globalAlpha = 1;
     this.#drawn = drawn;
 
+    this.#paintStandingLabels(ctx, reveal);
     this.#paintHorizon(ctx, view, camera);
 
     this.#frameMs += performance.now() - started;
     this.#frames++;
+  }
+
+  /**
+   * Project just the figure stars, into the reusable map.
+   *
+   * Identical trigonometry to the main loop — deliberately so, because the
+   * lines have to land on the stars to the pixel. Stars below the horizon are
+   * simply absent from the map, and `#paintFigures` treats an absent endpoint
+   * as a segment that does not exist: half a figure below the horizon draws the
+   * half that is up, and no line dives into the ground.
+   */
+  #projectFigureStars(
+    originX: number,
+    originY: number,
+    scale: number,
+    sinLat: number,
+    cosLat: number,
+    lst: number,
+    view: Viewport,
+  ): void {
+    this.#figureScreen.clear();
+    if (this.#figureStars.length === 0) return;
+
+    const margin = 24;
+    for (const rs of this.#figureStars) {
+      const h = (lst - rs.raDeg) * DEG;
+      const cosH = Math.cos(h);
+      const sinAlt = rs.sinDec * sinLat + rs.cosDec * cosLat * cosH;
+      if (sinAlt <= 0) continue;
+
+      const altitude = Math.asin(sinAlt > 1 ? 1 : sinAlt) / DEG;
+      const azimuth = Math.atan2(
+        -rs.cosDec * Math.sin(h),
+        rs.sinDec * cosLat - rs.cosDec * sinLat * cosH,
+      );
+      const r = zenithRadius(altitude) * scale;
+      const x = originX - r * Math.sin(azimuth);
+      const y = originY - r * Math.cos(azimuth);
+      if (x < -margin || y < -margin || x > view.width + margin || y > view.height + margin) {
+        continue;
+      }
+      const extinction =
+        altitude < FIGURE_EXTINCTION_DEGREES
+          ? 0.35 + 0.65 * (altitude / FIGURE_EXTINCTION_DEGREES)
+          : 1;
+      this.#figureScreen.set(rs.star.id, { x, y, extinction });
+    }
+  }
+
+  /**
+   * The stick figures: the thing that turns 8,849 points into Orion.
+   *
+   * "Nothing for people to recognise" was the review gate's phrase, and this is
+   * the direct answer to it — the shapes everyone already knows, drawn from the
+   * real geometry, at an alpha chosen so you notice them without being shown
+   * them. Each segment takes the fainter of its two endpoints' extinction, so a
+   * figure setting into the horizon haze dims as one thing rather than fraying.
+   */
+  #paintFigures(ctx: CanvasRenderingContext2D, reveal: number): void {
+    if (this.#figureScreen.size === 0 || reveal <= 0) return;
+
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.lineWidth = 1;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    for (const figure of this.#figures) {
+      for (const line of figure.lines) {
+        for (let i = 0; i + 1 < line.length; i++) {
+          const a = this.#figureScreen.get(line[i] as string);
+          const b = this.#figureScreen.get(line[i + 1] as string);
+          if (!a || !b) continue;
+          const alpha = FIGURE_ALPHA * reveal * Math.min(a.extinction, b.extinction);
+          if (alpha < 0.004) continue;
+          ctx.strokeStyle = `rgba(150, 175, 225, ${alpha})`;
+          ctx.beginPath();
+          ctx.moveTo(a.x, a.y);
+          ctx.lineTo(b.x, b.y);
+          ctx.stroke();
+        }
+      }
+    }
+    ctx.restore();
+  }
+
+  /**
+   * The standing names — the first-magnitude stars, labelled at rest.
+   *
+   * Not a chart: 21 stars qualify in the whole sky and about ten are ever up at
+   * once, so this adds a handful of quiet words rather than a layer of text.
+   * They sit to the star's right at a fixed offset from its own drawn radius,
+   * so a bright star's name clears its halo instead of sitting inside it.
+   *
+   * The LEAD's label is drawn separately, in `#paintLead`, and is untouched: it
+   * is brighter, it breathes with the phrase, and it can name any star the sky
+   * happens to be speaking through — including a faint one with no standing
+   * name of its own. When the LEAD is one of these 21 the two coincide, which
+   * reads as the name brightening rather than as a second label.
+   */
+  #paintStandingLabels(ctx: CanvasRenderingContext2D, reveal: number): void {
+    if (this.#labelled.length === 0 || reveal <= 0) return;
+
+    const width = this.#view.width;
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.font = '400 11px ui-serif, Georgia, "Times New Roman", serif';
+    ctx.textBaseline = 'middle';
+    for (const item of this.#labelled) {
+      // The LEAD paints its own, brighter name in the same place.
+      if (this.#glow.leadStarId !== null && this.#glow.leadLabel === item.label) continue;
+      const alpha = 0.52 * reveal * item.extinction;
+      if (alpha < 0.01) continue;
+
+      // Flip to the star's left rather than run off the edge. On a 390 px
+      // phone Arcturus sits near the right rim and "Arcturus" became "A" — a
+      // truncated name is worse than no name, because it reads as a bug in the
+      // sky rather than as a star that happens to be near the edge.
+      const gap = item.radius + 5;
+      const flip = item.x + gap + ctx.measureText(item.label).width > width - 6;
+      ctx.textAlign = flip ? 'right' : 'left';
+      ctx.fillStyle = `rgba(214, 226, 246, ${alpha})`;
+      ctx.fillText(item.label, flip ? item.x - gap : item.x + gap, item.y);
+    }
+    ctx.restore();
   }
 
   /** The deep-space gradient: never flat black, never bright. */

@@ -243,6 +243,20 @@ export interface LivingSkyConfig extends MappingConfig {
   gatheringSeconds: number;
   closingSeconds: number;
 
+  // ---- THE ARRIVAL (Slice B2): endless mode's opening, in PIECE seconds
+  /**
+   * Length of the composed arrival in endless mode; 0 turns it off entirely and
+   * restores the pre-B2 behaviour exactly. Ignored in birth-sky, which has a
+   * composed arc of its own.
+   */
+  arrivalSeconds: number;
+  /** Ground and chord alone for this long, before anything else may enter. */
+  arrivalGestureSeconds: number;
+  /** How long the figuration takes to come in, once the gesture is over. */
+  arrivalEntrySeconds: number;
+  /** The lead's first phrase may not start before this. */
+  arrivalLeadInSeconds: number;
+
   /** A constellation must clear this mean altitude to be worth speaking of. */
   constellationAltitudeThreshold: number;
   /**

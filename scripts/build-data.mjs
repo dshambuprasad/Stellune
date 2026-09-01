@@ -34,6 +34,13 @@ const FRESH = process.argv.includes('--fresh');
  * Sources. HYG v3.8 is the final v3-series release of the catalogue the build
  * plan specifies; the repo's CURRENT/ folder has since moved to v4.x.
  */
+/**
+ * The d3-celestial revision the constellation figures are taken from.
+ *
+ * Last upstream change to `data/constellations.lines.json` was 2020-03-20.
+ */
+const CONSTELLATION_SOURCE_COMMIT = 'd2e20e104b86429d90ac8227a5b021262b45d75a';
+
 const SOURCES = {
   stars: {
     url: 'https://raw.githubusercontent.com/astronexus/HYG-Database/main/hyg/v3/hyg_v38.csv.gz',
@@ -56,6 +63,31 @@ const SOURCES = {
   countries: {
     url: 'https://download.geonames.org/export/dump/countryInfo.txt',
     file: 'countryInfo.txt',
+  },
+  /**
+   * The Western constellation stick figures (Slice B2).
+   *
+   * PINNED BY COMMIT, not by branch. The URL names an immutable revision, so
+   * "re-run the build" cannot quietly re-draw the sky — a line set is a
+   * *drawing*, upstream is free to redraw it, and a keepsake generated last
+   * year should still show the Orion it showed last year.
+   *
+   * THE LICENCE MATTERS AND SO DOES WHICH FILE. d3-celestial is BSD-3-Clause,
+   * which this project can ship with attribution. Its *Chinese* skyculture
+   * files are NOT: they derive from Stellarium and are GPL, which would reach
+   * the whole bundle. This build takes `constellations.lines.json` — the
+   * Western set — and nothing else from the repository.
+   */
+  constellationLines: {
+    url:
+      'https://raw.githubusercontent.com/ofrohn/d3-celestial/' +
+      `${CONSTELLATION_SOURCE_COMMIT}/data/constellations.lines.json`,
+    file: 'constellations.lines.json',
+    home: 'https://github.com/ofrohn/d3-celestial',
+    licence: 'BSD-3-Clause',
+    licenceUrl: 'https://opensource.org/licenses/BSD-3-Clause',
+    commit: CONSTELLATION_SOURCE_COMMIT,
+    copyright: 'Copyright (c) 2015, Olaf Frohn',
   },
 };
 
@@ -339,6 +371,140 @@ function mergeClosePairs(stars) {
   return { kept, merged };
 }
 
+// ------------------------------------------------- constellation figures
+
+/**
+ * Turn d3-celestial's line GeoJSON into polylines of OUR star ids.
+ *
+ * WHY IDS AND NOT COORDINATES. The upstream file gives each vertex as a
+ * position. Drawn from positions, the lines would land *near* the stars this
+ * app renders rather than *on* them — HYG and d3-celestial round differently,
+ * and the merge-close-pairs step has already moved a few of our stars to a
+ * primary component. A line that misses its star by two pixels reads as a
+ * mistake at any zoom. So every vertex is resolved to a catalogue star here, at
+ * build time, and the renderer draws between the very positions it has just
+ * drawn the stars at. Wrong-by-construction becomes impossible.
+ *
+ * THE SUBSET RULE. A polyline survives only if EVERY one of its vertices
+ * resolves. A partial figure is worse than no figure: a stick man missing a leg
+ * is not a fainter stick man, it is a wrong one. A constellation with no
+ * surviving polyline is dropped entirely.
+ *
+ * The match radius is `MERGE_ARCMIN`, the same 1 arcminute this build already
+ * uses to decide that two catalogue rows are one point of light — which is the
+ * principled number here too, because that is exactly the ambiguity being
+ * resolved. Measured on the pinned revision the fit is far tighter than it
+ * needs to be: half the vertices land on their star exactly, 99% within 7
+ * arcseconds, the worst at 31.
+ */
+function buildConstellationLines(geojson, stars) {
+  const D = Math.PI / 180;
+  const toVec = (raDeg, decDeg) => {
+    const r = raDeg * D;
+    const d = decDeg * D;
+    return [Math.cos(d) * Math.cos(r), Math.cos(d) * Math.sin(r), Math.sin(d)];
+  };
+
+  // A coarse 2-degree bucket grid. Brute force is 893 x 8,849 dot products,
+  // which is fine, but this build is already slow enough to be run impatiently.
+  const CELL = 2;
+  const grid = new Map();
+  const cellKey = (raDeg, decDeg) =>
+    `${Math.floor((((raDeg % 360) + 360) % 360) / CELL)}:${Math.floor((decDeg + 90) / CELL)}`;
+  for (const star of stars) {
+    const key = cellKey(star.ra, star.dec);
+    const bucket = grid.get(key);
+    if (bucket) bucket.push(star);
+    else grid.set(key, [star]);
+  }
+
+  const limitDeg = MERGE_ARCMIN / 60;
+  const nearest = (raDeg, decDeg) => {
+    const v = toVec(raDeg, decDeg);
+    const cx = Math.floor((((raDeg % 360) + 360) % 360) / CELL);
+    const cy = Math.floor((decDeg + 90) / CELL);
+    const lanes = Math.ceil(360 / CELL);
+    let best = null;
+    let bestDeg = Infinity;
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dy = -1; dy <= 1; dy++) {
+        const bucket = grid.get(`${(((cx + dx) % lanes) + lanes) % lanes}:${cy + dy}`);
+        if (!bucket) continue;
+        for (const star of bucket) {
+          const w = toVec(star.ra, star.dec);
+          const dot = Math.min(1, Math.max(-1, v[0] * w[0] + v[1] * w[1] + v[2] * w[2]));
+          const deg = Math.acos(dot) / D;
+          if (deg < bestDeg) {
+            bestDeg = deg;
+            best = star;
+          }
+        }
+      }
+    }
+    return bestDeg <= limitDeg ? { star: best, deg: bestDeg } : null;
+  };
+
+  const constellations = [];
+  let vertices = 0;
+  let resolved = 0;
+  let worstArcsec = 0;
+  const droppedPolylines = [];
+  const droppedConstellations = [];
+
+  for (const feature of geojson.features ?? []) {
+    const id = feature.id;
+    const geometry = feature.geometry ?? {};
+    const source =
+      geometry.type === 'MultiLineString'
+        ? geometry.coordinates
+        : geometry.type === 'LineString'
+          ? [geometry.coordinates]
+          : [];
+
+    const lines = [];
+    for (const polyline of source) {
+      const ids = [];
+      let complete = true;
+      for (const [lon, lat] of polyline) {
+        // d3-celestial writes right ascension as a longitude in [-180, 180].
+        const ra = ((lon % 360) + 360) % 360;
+        vertices++;
+        const hit = nearest(ra, lat);
+        if (!hit) {
+          complete = false;
+          continue;
+        }
+        resolved++;
+        if (hit.deg * 3600 > worstArcsec) worstArcsec = hit.deg * 3600;
+        // Two vertices can land on the same star once close pairs are merged;
+        // a zero-length segment is nothing to draw.
+        if (ids[ids.length - 1] !== hit.star.id) ids.push(hit.star.id);
+      }
+      if (!complete) {
+        droppedPolylines.push(id);
+        continue;
+      }
+      if (ids.length >= 2) lines.push(ids);
+    }
+
+    if (lines.length === 0) droppedConstellations.push(id);
+    else constellations.push({ id, lines });
+  }
+
+  constellations.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  return {
+    constellations,
+    stats: {
+      vertices,
+      resolved,
+      worstArcsec: Math.round(worstArcsec * 10) / 10,
+      polylines: constellations.reduce((n, c) => n + c.lines.length, 0),
+      droppedPolylines,
+      droppedConstellations,
+    },
+  };
+}
+
 // ------------------------------------------------------------------ cities
 
 function parseTimezoneOffsets(text) {
@@ -470,8 +636,8 @@ function writeAttribution(facts) {
      Re-run \`npm run build:data\` to regenerate, and the access date below
      updates with it. This file exists so the honesty claim is never stale. -->
 
-Both bundled datasets are free and openly licensed, and **both require
-attribution**. Neither is public domain — see the licences below.
+All three bundled datasets are free and openly licensed, and **all three
+require attribution**. None is public domain — see the licences below.
 
 **Accessed: ${facts.accessDate}**
 
@@ -560,6 +726,77 @@ the full list of stated astronomical simplifications.
 
 ---
 
+## Constellation figures — d3-celestial (Western skyculture)
+
+- **Source:** ${SOURCES.constellationLines.home}
+- **File:** \`data/constellations.lines.json\`, pinned at commit
+  \`${SOURCES.constellationLines.commit}\`
+- **SHA-256 of the downloaded file:** \`${facts.linesSha}\`
+- **Licence:** [${SOURCES.constellationLines.licence}](${SOURCES.constellationLines.licenceUrl})
+- **${SOURCES.constellationLines.copyright}.** All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this
+   list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright notice,
+   this list of conditions and the following disclaimer in the documentation
+   and/or other materials provided with the distribution.
+3. Neither the name of the copyright holder nor the names of its contributors
+   may be used to endorse or promote products derived from this software
+   without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+### ONLY the Western set is used, and that is a licence decision
+
+d3-celestial also ships Chinese skyculture line files. **Those are not used
+here.** They derive from Stellarium and are GPL-licensed, which would reach this
+whole bundle; the Western \`constellations.lines.json\` is BSD-3-Clause, which
+this project can ship with the notice above. If a future slice wants other
+skycultures — and it should, because the sky is not only European — they need a
+separately-licensed source, not this repository's other files.
+
+### Transforms applied to produce \`constellations.lines.json\`
+
+**${facts.constellationCount}** constellations and
+**${facts.lineStats.polylines}** polylines, from
+**${facts.lineStats.vertices}** source vertices:
+
+1. Read right ascension back from the GeoJSON longitude convention
+   (\`[-180, 180]\` → \`[0, 360)\` degrees).
+2. **Resolved every vertex to a star in \`stars.hyg.subset.json\`**, within
+   ${MERGE_ARCMIN} arcminute — the same radius this build uses to decide two
+   catalogue rows are one point of light. **${facts.lineStats.resolved}** of
+   ${facts.lineStats.vertices} resolved; the worst fit is
+   ${facts.lineStats.worstArcsec} arcseconds. Storing star ids rather than
+   coordinates is what makes a line land *on* the star the app draws instead of
+   near it.
+3. Dropped any polyline with an unresolvable vertex${
+    facts.lineStats.droppedPolylines.length === 0 ? ' — none were' : ''
+  }, and any
+   constellation left with no polylines${
+     facts.lineStats.droppedConstellations.length === 0 ? ' — none were' : ''
+   }. A partial figure is not a
+   fainter figure, it is a wrong one.
+4. Collapsed consecutive vertices resolving to the same star (close pairs the
+   star build had already merged).
+5. Sorted by constellation id, so regeneration is byte-identical.
+
+**Coordinates are J2000**, matching the star catalogue.
+
+---
+
 ## What this means for reuse
 
 The application **code** is MIT (see \`LICENSE\`). The **bundled data** is not:
@@ -567,8 +804,10 @@ The application **code** is MIT (see \`LICENSE\`). The **bundled data** is not:
 - Redistributing \`stars.hyg.subset.json\` (a derivative of HYG) carries the
   **ShareAlike** obligation — share it under CC BY-SA, with attribution.
 - Redistributing \`cities.json\` requires **attribution** to GeoNames.
+- Redistributing \`constellations.lines.json\` requires the BSD-3-Clause notice
+  above, reproduced in full.
 
-Keeping this file alongside the data satisfies both.
+Keeping this file alongside the data satisfies all three.
 `;
   writeFileSync(join(OUT, 'ATTRIBUTION.md'), md);
 }
@@ -615,11 +854,49 @@ async function main() {
   log(`  ${cities.length.toLocaleString('en-US')} cities bundled across ${countryCount} countries`);
   log(`  largest: ${cities[0].name}, ${cities[0].country}`);
 
+  log('\nConstellation figures — d3-celestial (Western skyculture)');
+  const linesBuf = await download(SOURCES.constellationLines);
+  const linesSha = sha256(linesBuf);
+  const { constellations, stats } = buildConstellationLines(
+    JSON.parse(linesBuf.toString('utf8')),
+    stars,
+  );
+  writeFileSync(
+    join(OUT, 'constellations.lines.json'),
+    `${JSON.stringify(
+      {
+        _source: {
+          home: SOURCES.constellationLines.home,
+          commit: SOURCES.constellationLines.commit,
+          licence: SOURCES.constellationLines.licence,
+          copyright: SOURCES.constellationLines.copyright,
+          note: 'Western skyculture only. The Chinese files in that repository derive from Stellarium and are GPL; they are deliberately not used.',
+        },
+        constellations,
+      },
+      null,
+      0,
+    )}\n`,
+  );
+  log(`  ${stats.resolved}/${stats.vertices} vertices resolved to catalogue stars` +
+      ` (worst ${stats.worstArcsec}", limit ${MERGE_ARCMIN * 60}")`);
+  log(`  ${constellations.length} constellations, ${stats.polylines} polylines`);
+  if (stats.droppedPolylines.length) {
+    log(`  ${stats.droppedPolylines.length} polylines dropped (a vertex had no star): ` +
+        `${[...new Set(stats.droppedPolylines)].join(', ')}`);
+  }
+  if (stats.droppedConstellations.length) {
+    log(`  dropped entirely: ${stats.droppedConstellations.join(', ')}`);
+  }
+
   const accessDate = new Date().toISOString().slice(0, 10);
   writeAttribution({
     accessDate,
     starsSha,
     citiesSha,
+    linesSha,
+    lineStats: stats,
+    constellationCount: constellations.length,
     starCount: stars.length,
     sourceRowCount,
     skippedSun,
@@ -631,7 +908,7 @@ async function main() {
     duplicatesDropped,
   });
 
-  log(`\nWrote public/data/{stars.hyg.subset.json, cities.json, ATTRIBUTION.md}`);
+  log(`\nWrote public/data/{stars.hyg.subset.json, cities.json, constellations.lines.json, ATTRIBUTION.md}`);
   log(`Access date recorded: ${accessDate}`);
 }
 

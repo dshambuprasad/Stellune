@@ -57,6 +57,7 @@ import { toHorizon } from './astro.ts';
 import { magnitudeToAmplitude, azimuthToPan, colourToTimbre } from './sonify.ts';
 import { lstAt } from './skyTime.ts';
 import { arcAt, type SessionPlan } from './session.ts';
+import { figurationGateAt } from './arrival.ts';
 import { soundingChordTonesCached, type SoundingTone } from './chordVoices.ts';
 import { formAt, patternByName, type FormPosition, type Movement } from './movement.ts';
 import type { ArcStage } from './types.ts';
@@ -437,6 +438,15 @@ export function figurationNotesInRange(
       const startSeconds = nominal + drift;
       if (startSeconds >= sessionEnd) continue;
 
+      // SLICE B2 — THE ARRIVAL. The weave is held out of the opening gesture
+      // and comes in over a lead-in. Read from the note's OWN onset, so this is
+      // a pure function of absolute piece time and partition invariance is
+      // untouched; a gated-out note is not emitted at all rather than emitted
+      // silent, because a voice with a zero envelope still costs a polyphony
+      // slot and still lands in a stem measurement.
+      const arrivalGate = figurationGateAt(plan.arrival, startSeconds);
+      if (arrivalGate <= 0) continue;
+
       const sounding = soundingChordTonesCached(plan, startSeconds);
 
       // On an ostinato cycle the movement restates its constellation's figure:
@@ -460,7 +470,7 @@ export function figurationNotesInRange(
       const accent = entry.slot === 0 ? 1.12 : 1;
       const breath = anticipating ? 0.85 : 1;
       const velocity =
-        (0.45 + 0.55 * energy) * accent * breath * movementVelocity * seamSwell;
+        (0.45 + 0.55 * energy) * accent * breath * movementVelocity * seamSwell * arrivalGate;
 
       const here = toHorizon(
         tone.star,

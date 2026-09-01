@@ -254,8 +254,18 @@ describe('THE MASTERING LAW, as configured', () => {
     // for — but the sustained bed is protected absolutely, and that protection
     // is structural: ground and chord are named here and given no limiter at
     // all, rather than being given one and asked to leave it alone.
+    //
+    // 2026-09-01 (Slice B2), ratified by HQ: the engagement bound moves from 1%
+    // to 10% for the transient-carrying stems. The 1% predates any measurement
+    // of struck figuration — it is the original 0% scaled down by intuition —
+    // and measured, a handpan or glockenspiel weave engages a 3 dB look-ahead
+    // limiter on several percent of samples with every catch inside the ratified
+    // ceiling. The two numbers that actually protect the music are unchanged and
+    // are asserted below: the 3 dB reduction ceiling, and the bed's structural
+    // zero. Pinned here so a relaxation has to be a deliberate edit to a test
+    // that says why, rather than a config tweak nobody reviews.
     const { limiter } = masteringFor(lenses);
-    expect(limiter.maxEngagedFraction).toBe(0.01);
+    expect(limiter.maxEngagedFraction).toBe(0.1);
     expect(limiter.maxReductionDb).toBe(3);
     expect(limiter.zeroEngagementStems).toEqual(['ground', 'chord']);
   });

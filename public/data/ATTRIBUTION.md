@@ -4,10 +4,10 @@
      Re-run `npm run build:data` to regenerate, and the access date below
      updates with it. This file exists so the honesty claim is never stale. -->
 
-Both bundled datasets are free and openly licensed, and **both require
-attribution**. Neither is public domain — see the licences below.
+All three bundled datasets are free and openly licensed, and **all three
+require attribution**. None is public domain — see the licences below.
 
-**Accessed: 2026-08-01**
+**Accessed: 2026-09-01**
 
 ---
 
@@ -89,6 +89,73 @@ the full list of stated astronomical simplifications.
 
 ---
 
+## Constellation figures — d3-celestial (Western skyculture)
+
+- **Source:** https://github.com/ofrohn/d3-celestial
+- **File:** `data/constellations.lines.json`, pinned at commit
+  `d2e20e104b86429d90ac8227a5b021262b45d75a`
+- **SHA-256 of the downloaded file:** `294f66bef5d5cf50b1e17f16d2efa1d97a15131612c68dd935adef6e7373e13c`
+- **Licence:** [BSD-3-Clause](https://opensource.org/licenses/BSD-3-Clause)
+- **Copyright (c) 2015, Olaf Frohn.** All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this
+   list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright notice,
+   this list of conditions and the following disclaimer in the documentation
+   and/or other materials provided with the distribution.
+3. Neither the name of the copyright holder nor the names of its contributors
+   may be used to endorse or promote products derived from this software
+   without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+### ONLY the Western set is used, and that is a licence decision
+
+d3-celestial also ships Chinese skyculture line files. **Those are not used
+here.** They derive from Stellarium and are GPL-licensed, which would reach this
+whole bundle; the Western `constellations.lines.json` is BSD-3-Clause, which
+this project can ship with the notice above. If a future slice wants other
+skycultures — and it should, because the sky is not only European — they need a
+separately-licensed source, not this repository's other files.
+
+### Transforms applied to produce `constellations.lines.json`
+
+**89** constellations and
+**150** polylines, from
+**893** source vertices:
+
+1. Read right ascension back from the GeoJSON longitude convention
+   (`[-180, 180]` → `[0, 360)` degrees).
+2. **Resolved every vertex to a star in `stars.hyg.subset.json`**, within
+   1 arcminute — the same radius this build uses to decide two
+   catalogue rows are one point of light. **893** of
+   893 resolved; the worst fit is
+   30.7 arcseconds. Storing star ids rather than
+   coordinates is what makes a line land *on* the star the app draws instead of
+   near it.
+3. Dropped any polyline with an unresolvable vertex — none were, and any
+   constellation left with no polylines — none were. A partial figure is not a
+   fainter figure, it is a wrong one.
+4. Collapsed consecutive vertices resolving to the same star (close pairs the
+   star build had already merged).
+5. Sorted by constellation id, so regeneration is byte-identical.
+
+**Coordinates are J2000**, matching the star catalogue.
+
+---
+
 ## What this means for reuse
 
 The application **code** is MIT (see `LICENSE`). The **bundled data** is not:
@@ -96,5 +163,7 @@ The application **code** is MIT (see `LICENSE`). The **bundled data** is not:
 - Redistributing `stars.hyg.subset.json` (a derivative of HYG) carries the
   **ShareAlike** obligation — share it under CC BY-SA, with attribution.
 - Redistributing `cities.json` requires **attribution** to GeoNames.
+- Redistributing `constellations.lines.json` requires the BSD-3-Clause notice
+  above, reproduced in full.
 
-Keeping this file alongside the data satisfies both.
+Keeping this file alongside the data satisfies all three.

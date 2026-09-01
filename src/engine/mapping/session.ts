@@ -31,6 +31,7 @@ import {
 import { scaleDegrees, type ScaleName } from './scales.ts';
 import { deriveAllMotifs, type Motif } from './motif.ts';
 import { planMovements, type MovementPlan } from './movement.ts';
+import { arrivalIntensity, arrivalPlanFor, type ArrivalPlan } from './arrival.ts';
 import type { ArcState, LivingSkyConfig, SkyWeather } from './types.ts';
 
 const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
@@ -72,6 +73,17 @@ export const DEFAULT_LIVING_SKY_CONFIG: LivingSkyConfig = {
   gestureSeconds: 8,
   gatheringSeconds: 75,
   closingSeconds: 60,
+
+  // THE ARRIVAL (Slice B2). 105 s sits in the middle of the brief's 90–120 s
+  // band. The gesture is 18 s because a drone needs about that long to stop
+  // being a sound and start being a place; the figuration then takes 12 s to
+  // arrive, and the lead waits until 34 s, by which point there is a weave for
+  // it to speak over. These four numbers are composed clothing in the same
+  // covenant category as tempo and timbre, and the ear gate rules on them.
+  arrivalSeconds: 105,
+  arrivalGestureSeconds: 18,
+  arrivalEntrySeconds: 12,
+  arrivalLeadInSeconds: 34,
 
   figurationSlots: 8,
   figurationSlotSeconds: 0.55,
@@ -141,6 +153,12 @@ export interface SessionPlan {
    */
   /** The form: movements, their patterns, and the transitions between them. */
   movementPlan: MovementPlan;
+  /**
+   * Endless mode's composed opening. `NO_ARRIVAL` in birth-sky, which has its
+   * own arc. Precomputed rather than derived per call because `arcAt` runs for
+   * every envelope breakpoint of every continuous voice.
+   */
+  arrival: ArrivalPlan;
   weatherCache: Map<number, SkyWeather>;
   /**
    * Memo for the sounding-chord-tone set, on an absolute grid. Pure caching: the
@@ -421,6 +439,7 @@ export function prepareSession(
     motifs,
     motifStars,
     movementPlan,
+    arrival: arrivalPlanFor(config),
     weatherCache: new Map(),
     toneCache: new Map(),
   };
@@ -455,7 +474,17 @@ export function arcAt(plan: SessionPlan, pieceSeconds: number): ArcState {
       if (toHorizon(entry.star, plan.observer.latitude, lst).altitude > 0) up++;
     }
     const fraction = plan.chordStars.length > 0 ? up / plan.chordStars.length : 0;
-    return { stage: 'endless', u: 0, intensity: clamp(0.35 + 0.65 * fraction, 0, 1) };
+    const sky = clamp(0.35 + 0.65 * fraction, 0, 1);
+    // SLICE B2 — THE ARRIVAL. For the first ~105 seconds a composed opening
+    // envelope is blended into the sky's own, so an endless session has a
+    // beginning instead of merely a start. After `arrival.seconds` the blend
+    // weight is exactly 1 and this returns `sky` unchanged, which is the whole
+    // of the pre-B2 behaviour with no residue. See `arrival.ts` for why.
+    return {
+      stage: 'endless',
+      u: 0,
+      intensity: clamp(arrivalIntensity(plan.arrival, pieceSeconds, sky), 0, 1),
+    };
   }
 
   const u = clamp(pieceSeconds / config.sessionSeconds, 0, 1);

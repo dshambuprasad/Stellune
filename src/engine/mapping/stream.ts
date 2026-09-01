@@ -35,6 +35,7 @@ import { hourAngleAtAltitude } from './skyEvents.ts';
 import { DEGREES_PER_SKY_SECOND, lstAt } from './skyTime.ts';
 import { measureWeather } from './skyWeather.ts';
 import { arcAt, type ChordStarPlan, type SessionPlan } from './session.ts';
+import { leadMaySpeakAt } from './arrival.ts';
 import {
   chooseOctave,
   gestureEnd,
@@ -189,6 +190,11 @@ function leadEvents(plan: SessionPlan, from: number, to: number): MusicalEvent[]
     for (const note of phrase.notes) {
       if (note.startSeconds < from || note.startSeconds >= to) continue;
       if (note.startSeconds >= sessionEnd) continue;
+      // SLICE B2 — THE ARRIVAL. The lead enters last, once there is a weave for
+      // it to speak over. Filtered on the note's own absolute onset, so a phrase
+      // straddling the boundary keeps exactly the notes that fall after it —
+      // the same rule, and the same purity, as every other gate in this file.
+      if (!leadMaySpeakAt(plan.arrival, note.startSeconds)) continue;
 
       const midi = degreeToMidi(
         anchorDegree + registerDegrees + note.degree,

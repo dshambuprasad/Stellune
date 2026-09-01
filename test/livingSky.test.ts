@@ -39,6 +39,9 @@ import {
   type PhraseNote,
   SIDEREAL_DAY_SECONDS,
   arcAt,
+  arrivalIntensity,
+  figurationGateAt,
+  NO_ARRIVAL,
   phrasesInRange,
   eventsInRange,
   hourAngleAtAltitude,
@@ -1683,6 +1686,183 @@ describe('the bloom movement — Zimmer additive', () => {
     for (const note of renderWindow(plan, 380, 500).events.filter((e) => e.role === 'figuration')) {
       expect(ladder.includes(((note.midi - plan.rootMidi) % 12 + 12) % 12)).toBe(true);
     }
+  });
+});
+
+// ===========================================================================
+// SLICE B2 — THE ARRIVAL: endless mode's composed opening
+// ===========================================================================
+
+describe('the arrival — endless mode gets a beginning', () => {
+  const plan = session({ mode: 'endless', kappa: 30 });
+  const arrival = plan.arrival;
+
+  // The phase joins, and one second either side of each — these are the times
+  // where a composed envelope meets a truthful one, and where a partition bug
+  // would hide if it were going to hide anywhere.
+  const boundaries = [
+    arrival.gestureSeconds,
+    arrival.figurationInSeconds,
+    arrival.leadInSeconds,
+    arrival.seconds,
+  ];
+
+  it('is active in endless mode and absent from birth-sky', () => {
+    expect(arrival.seconds).toBeGreaterThan(0);
+    expect(session({ mode: 'birth-sky' }).arrival).toEqual(NO_ARRIVAL);
+  });
+
+  it('orders its phases: gesture, then the weave, then the lead, then handover', () => {
+    expect(arrival.gestureSeconds).toBeGreaterThan(0);
+    expect(arrival.figurationInSeconds).toBeGreaterThan(arrival.gestureSeconds);
+    expect(arrival.leadInSeconds).toBeGreaterThanOrEqual(arrival.gestureSeconds);
+    expect(arrival.seconds).toBeGreaterThanOrEqual(arrival.figurationInSeconds);
+    // The brief's band: a composed mini-arc of roughly 90-120 seconds.
+    expect(arrival.seconds).toBeGreaterThanOrEqual(90);
+    expect(arrival.seconds).toBeLessThanOrEqual(120);
+  });
+
+  // ---- THE GATE, at the boundary that did not exist before this slice -----
+
+  it('THE GATE — partition invariance holds across every arrival boundary', () => {
+    const T = 300;
+    const whole = renderWindow(plan, 0, T);
+
+    // Cut exactly ON each join, and a hair either side of it. An event whose
+    // onset lands on a cut is the case that breaks naive windowing.
+    const cuts = new Set<number>([0, T]);
+    for (const b of boundaries) {
+      for (const d of [-1, -0.001, 0, 0.001, 1]) {
+        const t = b + d;
+        if (t > 0 && t < T) cuts.add(t);
+      }
+    }
+    const ordered = [...cuts].sort((a, b) => a - b);
+
+    const pieces: ScoreWindow[] = [];
+    for (let i = 0; i + 1 < ordered.length; i++) {
+      pieces.push(renderWindow(plan, ordered[i] as number, ordered[i + 1] as number));
+    }
+    expect(unionOf(pieces)).toEqual(sortedEvents(whole));
+  });
+
+  it('THE GATE — the arrival span reassembles at several window sizes', () => {
+    const T = 300;
+    const whole = renderWindow(plan, 0, T);
+    for (const size of [3, 7, 29, 105]) {
+      const pieces: ScoreWindow[] = [];
+      for (let t = 0; t < T; t += size) pieces.push(renderWindow(plan, t, Math.min(T, t + size)));
+      expect(unionOf(pieces), `window size ${size}`).toEqual(sortedEvents(whole));
+    }
+  });
+
+  it('emits every arrival-span event exactly once', () => {
+    const pieces: ScoreWindow[] = [];
+    for (let t = 0; t < 300; t += 11) pieces.push(renderWindow(plan, t, Math.min(300, t + 11)));
+    const keys = pieces.flatMap((w) => w.events).map(key);
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  // ---- what the arrival is FOR ------------------------------------------
+
+  it('opens on ground and chord alone', () => {
+    const gesture = renderWindow(plan, 0, arrival.gestureSeconds).events;
+    expect(gesture.length).toBeGreaterThan(0);
+    expect(gesture.some((e) => e.role === 'ground')).toBe(true);
+    expect(gesture.some((e) => e.role === 'chord')).toBe(true);
+    expect(gesture.filter((e) => e.role === 'figuration')).toEqual([]);
+    expect(gesture.filter((e) => e.role === 'lead')).toEqual([]);
+  });
+
+  it('brings the figuration in after the gesture, and the lead in after that', () => {
+    const events = renderWindow(plan, 0, 300).events;
+    const first = (role: string): number =>
+      Math.min(...events.filter((e) => e.role === role).map((e) => e.startSeconds));
+
+    expect(first('figuration')).toBeGreaterThanOrEqual(arrival.gestureSeconds);
+    expect(first('figuration')).toBeLessThan(arrival.figurationInSeconds + 12);
+    expect(first('lead')).toBeGreaterThanOrEqual(arrival.leadInSeconds);
+  });
+
+  it('leads the weave in rather than switching it on', () => {
+    // Inside the lead-in the gate is strictly between silence and full weight,
+    // so the figuration arrives as an entrance and not as a cut.
+    const mid = (arrival.gestureSeconds + arrival.figurationInSeconds) / 2;
+    expect(figurationGateAt(arrival, arrival.gestureSeconds - 0.001)).toBe(0);
+    expect(figurationGateAt(arrival, mid)).toBeGreaterThan(0);
+    expect(figurationGateAt(arrival, mid)).toBeLessThan(1);
+    expect(figurationGateAt(arrival, arrival.figurationInSeconds)).toBe(1);
+    expect(figurationGateAt(arrival, 10_000)).toBe(1);
+  });
+
+  // ---- and what it must NOT do ------------------------------------------
+
+  it('hands back to the sky with no residue at all', () => {
+    // Past the arrival, `arcAt` must return the sky-richness value it always
+    // returned. Asserted against the function that computes it, so this cannot
+    // be satisfied by an arrival that merely happens to land nearby.
+    for (const t of [arrival.seconds, arrival.seconds + 1, 600, 2400, 5000]) {
+      const sky = arrivalIntensity(NO_ARRIVAL, t, arcAt(plan, t).intensity);
+      expect(arrivalIntensity(arrival, t, sky)).toBeCloseTo(sky, 12);
+    }
+  });
+
+  it('is continuous — no step anywhere across the arrival', () => {
+    // A step in intensity is a step in the ground's amplitude envelope, which
+    // is a click in a drone. Sampled finely across the whole span and past it.
+    let previous = arcAt(plan, 0).intensity;
+    for (let t = 0.25; t <= arrival.seconds + 60; t += 0.25) {
+      const now = arcAt(plan, t).intensity;
+      expect(Math.abs(now - previous), `step at t=${t}`).toBeLessThan(0.02);
+      previous = now;
+    }
+  });
+
+  it('actually builds — the opening is far quieter than the steady state', () => {
+    const opening = arcAt(plan, 0).intensity;
+    const settled = arcAt(plan, arrival.seconds + 30).intensity;
+    expect(opening).toBeLessThan(0.15);
+    expect(settled - opening).toBeGreaterThan(0.25);
+    // Monotone through the composed phases: the arrival only ever grows.
+    for (let t = 0; t < arrival.figurationInSeconds; t += 0.5) {
+      expect(arcAt(plan, t + 0.5).intensity).toBeGreaterThanOrEqual(
+        arcAt(plan, t).intensity - 1e-9,
+      );
+    }
+  });
+
+  it('changes WHEN layers enter, never which notes they play', () => {
+    // Every pitch the arrival lets through is one the un-arrived engine would
+    // also have played at that instant: the sky still chooses, the arrival only
+    // decides whether the layer is heard yet.
+    const bare = session({ mode: 'endless', kappa: 30, arrivalSeconds: 0 });
+    const withArrival = renderWindow(plan, 0, 300).events;
+    const without = new Set(renderWindow(bare, 0, 300).events.map(key));
+    for (const e of withArrival) {
+      if (e.role === 'ground' || e.role === 'weather') continue; // composed envelope, by design
+      expect(without.has(key(e)), `${e.role} ${e.midi} @${e.startSeconds}`).toBe(true);
+    }
+  });
+
+  it('turns off completely when its length is zero', () => {
+    const bare = session({ mode: 'endless', kappa: 30, arrivalSeconds: 0 });
+    expect(bare.arrival).toEqual(NO_ARRIVAL);
+    // Identical to the pre-B2 engine: the sky-richness envelope, from t = 0.
+    expect(arcAt(bare, 0).intensity).toBeCloseTo(arcAt(bare, 0.5).intensity, 3);
+  });
+
+  it('leaves birth-sky\'s arc untouched', () => {
+    const birth = session({ mode: 'birth-sky' });
+    const stages = [0, 5, 50, 300, 450, 640].map((t) => arcAt(birth, t).stage);
+    expect(stages).toEqual([
+      'opening',
+      'opening',
+      'gathering',
+      'building',
+      'bloom',
+      'closing',
+    ]);
+    expect(arcAt(birth, 0).intensity).toBe(0.12);
   });
 });
 

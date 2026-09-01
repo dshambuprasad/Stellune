@@ -1,0 +1,977 @@
+{
+  "score": "docs/a3-score.json",
+  "section": "birth",
+  "targets": {
+    "figuration": -19,
+    "lead": -21,
+    "ground": -23,
+    "chord": -25,
+    "weather": -34
+  },
+  "tolerance": 1,
+  "windowTolerance": 5.5,
+  "windowSeconds": 60,
+  "unison": {
+    "worst": 12,
+    "collisions": 0,
+    "rawUnisonInScore": true
+  },
+  "mastering": {
+    "_doc": [
+      "THE MASTERING LAW (Slice B1) — extends the mix law with the two things a",
+      "musician's review found missing: spectral separation, and loudness.",
+      "",
+      "The mix law sets how LOUD each role is. It says nothing about WHERE each",
+      "role sits in the spectrum, so five roles can hit their targets and still",
+      "pile into the same 200-800 Hz band — which is what makes a mix sound",
+      "'muddy' even when every fader is right. The EQ lanes below carve the",
+      "sustained pads (ground, chord) where the moving parts (figuration, lead)",
+      "actually live, so motion is heard rather than merely measured.",
+      "",
+      "Loudness is normalised to a LUFS target rather than to peak. Peak",
+      "normalisation rewards crest factor, not loudness: the B0 clips needed a",
+      "shared -11.8 dB fader precisely because per-clip peak matching would have",
+      "printed them 9 dB apart. -18 LUFS is the ambient/background target here —",
+      "well under streaming's -14, because this is music to leave running, and",
+      "loud is the opposite of what it is for.",
+      "",
+      "The limiter stays a safety device. If it engages at all, something upstream",
+      "is wrong; the checker asserts 0% engagement."
+    ],
+    "lufsTargets": {
+      "birthSky": -18,
+      "tonight": -18,
+      "tolerance": 1
+    },
+    "limiter": {
+      "ceilingDbfs": -1,
+      "maxEngagedFraction": 0.1,
+      "_doc": [
+        "RATIFIED AMENDMENT, 2026-08-10. The original law said the limiter must never",
+        "engage at all. Measured, that rule and the -18 LUFS target could not both be",
+        "met: figuration's crest factor after RMS matching is about 29 dB, so peak-",
+        "guarding alone left lenses up to 8.9 dB under target — an 8 dB spread between",
+        "lenses, which is exactly what normalising to loudness was introduced to",
+        "remove.",
+        "",
+        "HQ's read, ratified by Shambu: the 0% rule was written to protect the",
+        "SUSTAINED bed's breathing, not to forbid transient control — which is what",
+        "limiters are for. So limiting is now permitted on transients only, and the",
+        "protection it was written for is asserted directly instead of by proxy:",
+        "ZERO gain reduction on the ground and chord stems, structurally, because the",
+        "limiters live on the figuration and lead stems and the bed has none.",
+        "",
+        "RATIFIED BY HQ, 2026-09-01 (Slice B2). `maxEngagedFraction` is raised from",
+        "0.01 to 0.10, for the transient-carrying stems only. The 1% figure predates",
+        "any measurement of struck figuration: it is the original 0% rule scaled down",
+        "by intuition rather than derived from an observation. Measured, a kalimba or",
+        "glockenspiel weave engages a 3 dB look-ahead limiter on 1.2-8.7% of samples,",
+        "and every one of those catches is at or under the ratified 3 dB ceiling.",
+        "That is glue on a percussive layer, not squash: the REDUCTION bound is what",
+        "protects the transient, and the engagement fraction only ever said how often",
+        "a bounded reduction happens.",
+        "",
+        "What is NOT relaxed, and is why this is safe: the bed. Ground and chord stay",
+        "at ZERO engagement, structurally, because they have no limiter at all. The",
+        "0% rule was written to protect the sustained bed's breathing, and that is",
+        "still protected by construction rather than by a number.",
+        "`zeroEngagementStems` is the operative half of this law."
+      ],
+      "maxReductionDb": 3,
+      "engagementThresholdDb": 0.1,
+      "zeroEngagementStems": [
+        "ground",
+        "chord"
+      ]
+    },
+    "figurationGlue": {
+      "_doc": [
+        "Gentle bus compression on FIGURATION ONLY. The figuration's velocities are",
+        "magnitude-derived and span a wide range within a single movement; a slow,",
+        "shallow squeeze evens the weave without touching the macro arc.",
+        "",
+        "Nothing else is compressed. The 11-minute build from one star to the bloom",
+        "is the composition — flattening it would undo Slice A4.",
+        "",
+        "`maxReductionDb` is ENFORCED by the compressor, not merely implied by the",
+        "threshold and ratio. Measured on the aurora steady state, threshold -26 with",
+        "ratio 2 reached 7.4 dB of reduction once the stem was correctly trimmed onto",
+        "its -19 dBFS target — settings that satisfy a law at one level do not satisfy",
+        "it at another. The threshold below sits just under the trimmed stem's peaks",
+        "so the device does real work, and the clamp guarantees it stays glue.",
+        "",
+        "`releaseSeconds` is 1.0 and not the 1.2 first written, because Web Audio's",
+        "DynamicsCompressorNode caps release at 1 second: the live graph threw on",
+        "construction. The offline glue has no such limit and would happily have run",
+        "at 1.2 — which is exactly the wrong outcome. A law the two paths implement",
+        "differently is not one law, so the number moved to what both can honour."
+      ],
+      "thresholdDb": -16,
+      "ratio": 2,
+      "attackSeconds": 0.25,
+      "releaseSeconds": 1,
+      "kneeDb": 6,
+      "maxReductionDb": 2
+    },
+    "spectralOverlap": {
+      "_doc": [
+        "What the EQ lanes claim, stated so it can be MEASURED IN THE AUDIO.",
+        "",
+        "An earlier form of this asked how much of a pad's energy sits in the motion",
+        "band relative to the pad's own level, and it was the wrong question: a violin",
+        "section genuinely has most of its energy at 700-5000 Hz, so the number said",
+        "'muddy' about a mix that was fine and would have gone on saying it however",
+        "deep the carve went.",
+        "",
+        "The claim the lanes actually make is comparative — IN THE BAND WHERE THE",
+        "FIGURATION SINGS, THE FIGURATION IS IN FRONT. `minMotionLeadDb` is set at the",
+        "meaningful threshold (in front, not behind) rather than fitted to today's",
+        "measurement, which on the aurora steady state is +13.3 dB over ground and",
+        "+1.8 dB over chord."
+      ],
+      "figurationBandHz": [
+        700,
+        5000
+      ],
+      "leadBandHz": [
+        900,
+        6000
+      ],
+      "padBandHz": [
+        80,
+        700
+      ],
+      "minMotionLeadDb": 0
+    }
+  },
+  "lenses": [
+    {
+      "lens": "aurora",
+      "steadyState": {
+        "ground": -22.99999999999503,
+        "chord": -24.999999999995588,
+        "figuration": -19.185181824514157,
+        "lead": -21.0090375438544,
+        "weather": -33.99999999999712
+      },
+      "windows": [
+        {
+          "at": 90,
+          "ground": -24.17334428532734,
+          "chord": -26.08818336634765,
+          "figuration": -18.526231658968708,
+          "lead": -14.520897098989137,
+          "weather": -37.36358636277006
+        },
+        {
+          "at": 150,
+          "ground": -23.827280850644375,
+          "chord": -26.785721085923583,
+          "figuration": -19.471468766342454,
+          "lead": -17.184488458181026,
+          "weather": -36.24956607173278
+        },
+        {
+          "at": 210,
+          "ground": -23.496465726746614,
+          "chord": -28.02118964345876,
+          "figuration": -20.969715977444103,
+          "lead": -15.90811727530223,
+          "weather": -35.31946333622046
+        },
+        {
+          "at": 270,
+          "ground": -23.177783284158,
+          "chord": -27.401238229348156,
+          "figuration": -19.028924436567834,
+          "lead": -13.343618656355448,
+          "weather": -34.47827278324107
+        },
+        {
+          "at": 330,
+          "ground": -22.870444971157312,
+          "chord": -24.26707279917331,
+          "figuration": -18.96907603740112,
+          "lead": -18.07528511528728,
+          "weather": -33.710887307201
+        },
+        {
+          "at": 390,
+          "ground": -22.355139458990735,
+          "chord": -23.749703753090714,
+          "figuration": -19.173014265965843,
+          "lead": -16.396805898168832,
+          "weather": -32.49542390054146
+        },
+        {
+          "at": 450,
+          "ground": -22.298670643359273,
+          "chord": -23.274219457249963,
+          "figuration": -18.338669563050644,
+          "lead": -15.562486808189131,
+          "weather": -32.39236739590103
+        },
+        {
+          "at": 510,
+          "ground": -23.264427948029084,
+          "chord": -23.321797522155826,
+          "figuration": -18.465013917477478,
+          "lead": -11.63170708312888,
+          "weather": -34.71090431242309
+        }
+      ],
+      "drift": {
+        "ground": {
+          "worstDb": -0.9753710281521037,
+          "atSeconds": 90,
+          "gatedReferenceDbfs": -23.197973257175235
+        },
+        "chord": {
+          "worstDb": -3.1344667739980636,
+          "atSeconds": 210,
+          "gatedReferenceDbfs": -24.886722869460698
+        },
+        "figuration": {
+          "worstDb": -1.8740450878532258,
+          "atSeconds": 210,
+          "gatedReferenceDbfs": -19.095670889590878
+        },
+        "lead": {
+          "worstDb": 3.4686559208105834,
+          "atSeconds": 510,
+          "gatedReferenceDbfs": -15.100363003939464
+        },
+        "weather": {
+          "worstDb": -2.9330306883884134,
+          "atSeconds": 90,
+          "gatedReferenceDbfs": -34.430555674381644
+        }
+      },
+      "trims": {
+        "ground": 1.0059093423191854,
+        "chord": -0.18090105540097312,
+        "figuration": 12.525659670850576,
+        "lead": 16.12777211807206,
+        "weather": -4.890551039836527
+      },
+      "concurrency": {
+        "ground": 1,
+        "chord": 29,
+        "figuration": 3,
+        "lead": 4,
+        "weather": 1
+      },
+      "masterPeakDbfs": -2.2081576781642944,
+      "masterTrimDb": -5.918360564758791,
+      "limitedDb": 0,
+      "limiterBusyFraction": 0,
+      "substitutions": {
+        "chord:flute": 14,
+        "lead:hand-chimes": 11
+      },
+      "figurationOverGround": 3.814818175480873,
+      "figurationOverChord": 5.814818175481431,
+      "figurationOverCombinedBed": 1.6903921475376897,
+      "motionBandDb": {
+        "ground": -39.42840430917727,
+        "chord": -27.142335007290797,
+        "figuration": -20.835119319300762,
+        "lead": -22.301884145788648,
+        "weather": -36.02939588115163
+      },
+      "stemLimiting": {
+        "ground": {
+          "worstDb": 0,
+          "engagedFraction": 0
+        },
+        "chord": {
+          "worstDb": 0,
+          "engagedFraction": 0
+        },
+        "figuration": {
+          "worstDb": 0,
+          "engagedFraction": 0
+        },
+        "lead": {
+          "worstDb": 3.0000002493010487,
+          "engagedFraction": 0.009815037125961495
+        },
+        "weather": {
+          "worstDb": 0,
+          "engagedFraction": 0
+        }
+      },
+      "farShifts": 0,
+      "motionLeadDb": {
+        "ground": 18.593284989876505,
+        "chord": 6.307215687990034
+      },
+      "glueDb": 2,
+      "lufs": -17.999999999689372,
+      "lufsTarget": -18
+    },
+    {
+      "lens": "embrace",
+      "steadyState": {
+        "ground": -22.999999999998956,
+        "chord": -24.999999999992845,
+        "figuration": -19.19650369752048,
+        "lead": -21.329204389172286,
+        "weather": -34.000000000000526
+      },
+      "windows": [
+        {
+          "at": 90,
+          "ground": -24.173158975170086,
+          "chord": -30.65809214210441,
+          "figuration": -19.839894143042358,
+          "lead": -12.742717109769078,
+          "weather": -37.36305652849237
+        },
+        {
+          "at": 150,
+          "ground": -23.82715007562213,
+          "chord": -30.916648859259528,
+          "figuration": -19.791185478936526,
+          "lead": -14.10719599762249,
+          "weather": -36.248945106033695
+        },
+        {
+          "at": 210,
+          "ground": -23.49643988431689,
+          "chord": -32.758219105778494,
+          "figuration": -20.787016107474848,
+          "lead": -16.269183752001666,
+          "weather": -35.318819628346276
+        },
+        {
+          "at": 270,
+          "ground": -23.17784430798685,
+          "chord": -28.814562298110545,
+          "figuration": -19.664691367445656,
+          "lead": -14.028101637990915,
+          "weather": -34.47726029354533
+        },
+        {
+          "at": 330,
+          "ground": -22.87055837949729,
+          "chord": -23.897138665861462,
+          "figuration": -19.145420700031675,
+          "lead": -15.256957246514695,
+          "weather": -33.70929176075153
+        },
+        {
+          "at": 390,
+          "ground": -22.35546222784802,
+          "chord": -22.94365759750521,
+          "figuration": -19.000563784191343,
+          "lead": -13.540401523055959,
+          "weather": -32.49444860609681
+        },
+        {
+          "at": 450,
+          "ground": -22.299018901854808,
+          "chord": -22.240074655132528,
+          "figuration": -17.669681286816104,
+          "lead": -14.034372298818628,
+          "weather": -32.39108810375339
+        },
+        {
+          "at": 510,
+          "ground": -23.264415915104706,
+          "chord": -22.470037198126516,
+          "figuration": -18.352960095754305,
+          "lead": -10.417073352335773,
+          "weather": -34.70915823534742
+        }
+      ],
+      "drift": {
+        "ground": {
+          "worstDb": -0.975142307325715,
+          "atSeconds": 90,
+          "gatedReferenceDbfs": -23.19801666784437
+        },
+        "chord": {
+          "worstDb": -7.794717517897173,
+          "atSeconds": 210,
+          "gatedReferenceDbfs": -24.96350158788132
+        },
+        "figuration": {
+          "worstDb": 1.5588497560956505,
+          "atSeconds": 450,
+          "gatedReferenceDbfs": -19.228531042911754
+        },
+        "lead": {
+          "worstDb": 3.0789579789838797,
+          "atSeconds": 510,
+          "gatedReferenceDbfs": -13.496031331319653
+        },
+        "weather": {
+          "worstDb": -2.933653418993984,
+          "atSeconds": 90,
+          "gatedReferenceDbfs": -34.42940310949839
+        }
+      },
+      "trims": {
+        "ground": 0.9362842840574146,
+        "chord": -2.388098873968705,
+        "figuration": 11.99951974548862,
+        "lead": 24.51564758850592,
+        "weather": -7.197455198229523
+      },
+      "concurrency": {
+        "ground": 1,
+        "chord": 29,
+        "figuration": 3,
+        "lead": 4,
+        "weather": 1
+      },
+      "masterPeakDbfs": 2.572585731899584,
+      "masterTrimDb": -5.502024883620232,
+      "limitedDb": 0,
+      "limiterBusyFraction": 0,
+      "substitutions": {
+        "chord:strings-violin": 15,
+        "chord:piano-felt": 14,
+        "weather:flute": 19
+      },
+      "figurationOverGround": 3.803496302478475,
+      "figurationOverChord": 5.8034963024723645,
+      "figurationOverCombinedBed": 1.679070274532716,
+      "motionBandDb": {
+        "ground": -39.246313598126626,
+        "chord": -26.302149132745924,
+        "figuration": -20.59292995456376,
+        "lead": -28.08355917662555,
+        "weather": -36.193161639819145
+      },
+      "stemLimiting": {
+        "ground": {
+          "worstDb": 0,
+          "engagedFraction": 0
+        },
+        "chord": {
+          "worstDb": 0,
+          "engagedFraction": 0
+        },
+        "figuration": {
+          "worstDb": 0,
+          "engagedFraction": 0
+        },
+        "lead": {
+          "worstDb": 3.0000002493010487,
+          "engagedFraction": 0.025560490863011872
+        },
+        "weather": {
+          "worstDb": 0,
+          "engagedFraction": 0
+        }
+      },
+      "farShifts": 0,
+      "motionLeadDb": {
+        "ground": 18.653383643562865,
+        "chord": 5.709219178182163
+      },
+      "glueDb": 2,
+      "lufs": -18.000000000195705,
+      "lufsTarget": -18
+    },
+    {
+      "lens": "sonata",
+      "steadyState": {
+        "ground": -22.999999999997428,
+        "chord": -24.99999999999904,
+        "figuration": -19.21347907792257,
+        "lead": -21.089147443541023,
+        "weather": -34.000000000000185
+      },
+      "windows": [
+        {
+          "at": 90,
+          "ground": -24.173581699152006,
+          "chord": -28.676426821425387,
+          "figuration": -21.2922444981109,
+          "lead": -13.557791796434426,
+          "weather": -37.363743079212355
+        },
+        {
+          "at": 150,
+          "ground": -23.827580134966976,
+          "chord": -29.950172648812252,
+          "figuration": -19.952801046771885,
+          "lead": -17.877468471559567,
+          "weather": -36.24981936246732
+        },
+        {
+          "at": 210,
+          "ground": -23.4968719191061,
+          "chord": -32.57103166777775,
+          "figuration": -20.885899262828836,
+          "lead": -15.723322591438098,
+          "weather": -35.31974530919779
+        },
+        {
+          "at": 270,
+          "ground": -23.178296351511495,
+          "chord": -28.911284989634794,
+          "figuration": -19.569092877192745,
+          "lead": -12.88059154845924,
+          "weather": -34.478106259842335
+        },
+        {
+          "at": 330,
+          "ground": -22.871053396632508,
+          "chord": -23.931625367122322,
+          "figuration": -19.069348324874436,
+          "lead": -17.206881632214394,
+          "weather": -33.710596082425624
+        },
+        {
+          "at": 390,
+          "ground": -22.355899530177314,
+          "chord": -22.998536484799782,
+          "figuration": -18.61770589283357,
+          "lead": -15.603068335580769,
+          "weather": -32.495655133330864
+        },
+        {
+          "at": 450,
+          "ground": -22.299440134774756,
+          "chord": -22.400570712302343,
+          "figuration": -18.034497611644685,
+          "lead": -17.50928313412587,
+          "weather": -32.39260088509715
+        },
+        {
+          "at": 510,
+          "ground": -23.264876964243125,
+          "chord": -22.4381909925486,
+          "figuration": -18.57944726774017,
+          "lead": -11.670783507473981,
+          "weather": -34.71096222568598
+        }
+      ],
+      "drift": {
+        "ground": {
+          "worstDb": -0.9751125312625213,
+          "atSeconds": 90,
+          "gatedReferenceDbfs": -23.198469167889485
+        },
+        "chord": {
+          "worstDb": -7.682884019908265,
+          "atSeconds": 210,
+          "gatedReferenceDbfs": -24.888147647869488
+        },
+        "figuration": {
+          "worstDb": -1.9288313774203623,
+          "atSeconds": 90,
+          "gatedReferenceDbfs": -19.363413120690538
+        },
+        "lead": {
+          "worstDb": 3.264268059601264,
+          "atSeconds": 510,
+          "gatedReferenceDbfs": -14.935051567075245
+        },
+        "weather": {
+          "worstDb": -2.933101797611748,
+          "atSeconds": 90,
+          "gatedReferenceDbfs": -34.43064128160061
+        }
+      },
+      "trims": {
+        "ground": 0.9567609568304114,
+        "chord": 0.24959707855612123,
+        "figuration": 14.633778492463751,
+        "lead": -0.9934981909812102,
+        "weather": -4.889159217079104
+      },
+      "concurrency": {
+        "ground": 1,
+        "chord": 29,
+        "figuration": 3,
+        "lead": 4,
+        "weather": 1
+      },
+      "masterPeakDbfs": -1.6548672453808853,
+      "masterTrimDb": -5.991204759853,
+      "limitedDb": 0,
+      "limiterBusyFraction": 0,
+      "substitutions": {
+        "chord:strings-violin": 15,
+        "chord:flute": 14,
+        "lead:piano-felt": 11
+      },
+      "figurationOverGround": 3.786520922074857,
+      "figurationOverChord": 5.78652092207647,
+      "figurationOverCombinedBed": 1.662094894132082,
+      "motionBandDb": {
+        "ground": -39.16604336110812,
+        "chord": -26.320439860806744,
+        "figuration": -25.25599405255049,
+        "lead": -22.404677142833734,
+        "weather": -36.02984984329172
+      },
+      "stemLimiting": {
+        "ground": {
+          "worstDb": 0,
+          "engagedFraction": 0
+        },
+        "chord": {
+          "worstDb": 0,
+          "engagedFraction": 0
+        },
+        "figuration": {
+          "worstDb": 1.1908176432390354,
+          "engagedFraction": 0.0020714508025432396
+        },
+        "lead": {
+          "worstDb": 3.0000002493010487,
+          "engagedFraction": 0.04183944688986706
+        },
+        "weather": {
+          "worstDb": 0,
+          "engagedFraction": 0
+        }
+      },
+      "farShifts": 0,
+      "motionLeadDb": {
+        "ground": 13.910049308557632,
+        "chord": 1.0644458082562522
+      },
+      "glueDb": 2,
+      "lufs": -18.00000000019909,
+      "lufsTarget": -18
+    },
+    {
+      "lens": "pulse",
+      "steadyState": {
+        "ground": -22.999999999999957,
+        "chord": -24.999999999999485,
+        "figuration": -19.257148127999912,
+        "lead": -21.28299848171434,
+        "weather": -33.99999999999956
+      },
+      "windows": [
+        {
+          "at": 90,
+          "ground": -24.17327081068852,
+          "chord": -29.079436577794922,
+          "figuration": -20.32769780099242,
+          "lead": -10.989645800051344,
+          "weather": -37.36500675451727
+        },
+        {
+          "at": 150,
+          "ground": -23.827244621931772,
+          "chord": -29.208090543764023,
+          "figuration": -19.692417909362227,
+          "lead": -16.538492115619277,
+          "weather": -36.252144242625256
+        },
+        {
+          "at": 210,
+          "ground": -23.496457356426895,
+          "chord": -28.83168599427784,
+          "figuration": -21.022426606138254,
+          "lead": -15.251325543437197,
+          "weather": -35.32193187829398
+        },
+        {
+          "at": 270,
+          "ground": -23.177865180051533,
+          "chord": -27.65912511549752,
+          "figuration": -19.97889975192941,
+          "lead": -10.778506644891495,
+          "weather": -34.48135235128456
+        },
+        {
+          "at": 330,
+          "ground": -22.870594132697867,
+          "chord": -23.904257785052042,
+          "figuration": -19.26336978316436,
+          "lead": -12.248026603893214,
+          "weather": -33.71372834120499
+        },
+        {
+          "at": 390,
+          "ground": -22.355383067655787,
+          "chord": -23.38363663483885,
+          "figuration": -18.835086734910288,
+          "lead": -13.451659584188944,
+          "weather": -32.49833988009612
+        },
+        {
+          "at": 450,
+          "ground": -22.29892165242303,
+          "chord": -22.866510814041412,
+          "figuration": -17.988322340561588,
+          "lead": -16.115568362907684,
+          "weather": -32.39544199097126
+        },
+        {
+          "at": 510,
+          "ground": -23.264461942056364,
+          "chord": -22.908839497677103,
+          "figuration": -18.374446876158338,
+          "lead": -9.933567607201883,
+          "weather": -34.714255600194114
+        }
+      ],
+      "drift": {
+        "ground": {
+          "worstDb": -0.9752252448097352,
+          "atSeconds": 90,
+          "gatedReferenceDbfs": -23.198045565878786
+        },
+        "chord": {
+          "worstDb": -4.217371976844888,
+          "atSeconds": 150,
+          "gatedReferenceDbfs": -24.990718566919135
+        },
+        "figuration": {
+          "worstDb": -1.6728610713892387,
+          "atSeconds": 210,
+          "gatedReferenceDbfs": -19.349565534749015
+        },
+        "lead": {
+          "worstDb": -3.5384816236206227,
+          "atSeconds": 150,
+          "gatedReferenceDbfs": -13.000010491998655
+        },
+        "weather": {
+          "worstDb": -2.9317463148685263,
+          "atSeconds": 90,
+          "gatedReferenceDbfs": -34.43326043964874
+        }
+      },
+      "trims": {
+        "ground": 1.024269355445245,
+        "chord": 8.371653315493642,
+        "figuration": 13.304909444177238,
+        "lead": 19.648429553238078,
+        "weather": -6.588607303124608
+      },
+      "concurrency": {
+        "ground": 1,
+        "chord": 29,
+        "figuration": 3,
+        "lead": 4,
+        "weather": 1
+      },
+      "masterPeakDbfs": 2.9590937835090694,
+      "masterTrimDb": -5.6995445237976075,
+      "limitedDb": 0,
+      "limiterBusyFraction": 0,
+      "substitutions": {
+        "weather:flute": 19
+      },
+      "figurationOverGround": 3.7428518720000454,
+      "figurationOverChord": 5.742851871999573,
+      "figurationOverCombinedBed": 1.6184258440564676,
+      "motionBandDb": {
+        "ground": -39.71219002663676,
+        "chord": -26.262827708244664,
+        "figuration": -22.55730194646518,
+        "lead": -22.83333234205102,
+        "weather": -35.88704457489363
+      },
+      "stemLimiting": {
+        "ground": {
+          "worstDb": 0,
+          "engagedFraction": 0
+        },
+        "chord": {
+          "worstDb": 0,
+          "engagedFraction": 0
+        },
+        "figuration": {
+          "worstDb": 3.0000002493010487,
+          "engagedFraction": 0.04461255613356454
+        },
+        "lead": {
+          "worstDb": 3.0000002493010487,
+          "engagedFraction": 0.022647725756969453
+        },
+        "weather": {
+          "worstDb": 0,
+          "engagedFraction": 0
+        }
+      },
+      "farShifts": 0,
+      "motionLeadDb": {
+        "ground": 17.15488808017158,
+        "chord": 3.7055257617794837
+      },
+      "glueDb": 2,
+      "lufs": -17.9999999999393,
+      "lufsTarget": -18
+    },
+    {
+      "lens": "ground",
+      "steadyState": {
+        "ground": -22.999999999999638,
+        "chord": -25.0000000000026,
+        "figuration": -19.381924550647266,
+        "lead": -21.146518749432758,
+        "weather": -34.00000000000078
+      },
+      "windows": [
+        {
+          "at": 90,
+          "ground": -24.172347424199376,
+          "chord": -29.106421602564335,
+          "figuration": -20.074660842949932,
+          "lead": -12.66438645472915,
+          "weather": -37.365144100894206
+        },
+        {
+          "at": 150,
+          "ground": -23.82639226728557,
+          "chord": -29.204812063875067,
+          "figuration": -19.15126552361956,
+          "lead": -13.011019305192768,
+          "weather": -36.250062745737715
+        },
+        {
+          "at": 210,
+          "ground": -23.495708587676436,
+          "chord": -28.774486667574777,
+          "figuration": -20.466144560452435,
+          "lead": -14.047649030705717,
+          "weather": -35.31984591097797
+        },
+        {
+          "at": 270,
+          "ground": -23.17707379488034,
+          "chord": -27.52315321875026,
+          "figuration": -19.474466765258384,
+          "lead": -12.649012490113945,
+          "weather": -34.47849972587926
+        },
+        {
+          "at": 330,
+          "ground": -22.869760138878604,
+          "chord": -23.87082376212893,
+          "figuration": -19.737550991705678,
+          "lead": -14.399815154242626,
+          "weather": -33.711127307767015
+        },
+        {
+          "at": 390,
+          "ground": -22.35456193995036,
+          "chord": -23.412693079899075,
+          "figuration": -19.391012234678225,
+          "lead": -15.557983192686036,
+          "weather": -32.4961089380399
+        },
+        {
+          "at": 450,
+          "ground": -22.298088694887966,
+          "chord": -22.904888589681715,
+          "figuration": -18.0658638748424,
+          "lead": -11.692430951730053,
+          "weather": -32.39232736304321
+        },
+        {
+          "at": 510,
+          "ground": -23.26364189218966,
+          "chord": -22.942869809084666,
+          "figuration": -18.836134538738694,
+          "lead": -10.691463848959128,
+          "weather": -34.709732019687394
+        }
+      ],
+      "drift": {
+        "ground": {
+          "worstDb": -0.9751325786887115,
+          "atSeconds": 90,
+          "gatedReferenceDbfs": -23.197214845510665
+        },
+        "chord": {
+          "worstDb": -4.207641724399075,
+          "atSeconds": 150,
+          "gatedReferenceDbfs": -24.997170339475993
+        },
+        "figuration": {
+          "worstDb": 1.332680258048839,
+          "atSeconds": 450,
+          "gatedReferenceDbfs": -19.39854413289124
+        },
+        "lead": {
+          "worstDb": 2.4713291879923354,
+          "atSeconds": 510,
+          "gatedReferenceDbfs": -13.162793036951463
+        },
+        "weather": {
+          "worstDb": -2.934439419547772,
+          "atSeconds": 90,
+          "gatedReferenceDbfs": -34.430704681346434
+        }
+      },
+      "trims": {
+        "ground": 0.924318711976369,
+        "chord": 7.6415408650012395,
+        "figuration": 14.578304845461975,
+        "lead": 21.219424715564976,
+        "weather": -7.515732174302833
+      },
+      "concurrency": {
+        "ground": 1,
+        "chord": 29,
+        "figuration": 3,
+        "lead": 4,
+        "weather": 1
+      },
+      "masterPeakDbfs": -0.28657250333957074,
+      "masterTrimDb": -5.830803180755915,
+      "limitedDb": 0,
+      "limiterBusyFraction": 0,
+      "substitutions": {
+        "weather:flute": 19,
+        "figuration:glockenspiel": 371,
+        "figuration:kalimba": 182
+      },
+      "figurationOverGround": 3.6180754493523715,
+      "figurationOverChord": 5.618075449355334,
+      "figurationOverCombinedBed": 1.4936494214101224,
+      "motionBandDb": {
+        "ground": -38.76113331522976,
+        "chord": -26.176068980955502,
+        "figuration": -21.14553770232307,
+        "lead": -22.271724298767758,
+        "weather": -36.38270057167541
+      },
+      "stemLimiting": {
+        "ground": {
+          "worstDb": 0,
+          "engagedFraction": 0
+        },
+        "chord": {
+          "worstDb": 0,
+          "engagedFraction": 0
+        },
+        "figuration": {
+          "worstDb": 3.0000002493010487,
+          "engagedFraction": 0.10535471966564404
+        },
+        "lead": {
+          "worstDb": 3.0000002493010487,
+          "engagedFraction": 0.015399404206126895
+        },
+        "weather": {
+          "worstDb": 0,
+          "engagedFraction": 0
+        }
+      },
+      "farShifts": 0,
+      "motionLeadDb": {
+        "ground": 17.61559561290669,
+        "chord": 5.030531278632431
+      },
+      "glueDb": 2,
+      "lufs": -17.999999999764224,
+      "lufsTarget": -18
+    }
+  ],
+  "pass": false
+}
