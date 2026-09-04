@@ -2280,3 +2280,59 @@ change how the screen *feels*; item 1 is the one that changes what it is *for*.
 HQ: the two tonight-score failures named above, which are outside all three
 rulings and which I have deliberately left failing; and the zoomed-state
 proposals, which are a design decision, not an implementation.
+
+**◇ HQ REVIEW GATE — SLICE B3, 2026-09-04. PASSED.** Three lenses were clipping
+in the browser and are not any more; one shared `masterTrimDb` in
+`scripts/lib/mixlaw.mjs` is the right fix and a better one than the brief asked
+for — the defect was never the fader, it was that there were two of them. The
+ratified surface is green, the frame is fixed, and `placeLabels()` as a pure
+function with the LEAD's box reserved by construction is exactly right. The
+`MASTERING_DEFAULTS` drift at 0.01 and the `e2e/b2-ux.spec.ts` gate re-arming
+itself were both real finds, self-reported. The zoomed-state diagnosis is the
+most useful page of analysis in this log: "the field gains no members" and "every
+reference to place leaves the frame at once" name the whole problem.
+
+**THE TWO TONIGHT-SCORE FAILURES ARE DEFERRED, NOT RULED** — and for a reason
+that arrived the same hour: the tonight mix is about to change fundamentally
+(below). Ruling on sonata's EQ lane or pulse's lead window against a bed that may
+not exist in a week would be ruling on a dead score. They stay failing and named.
+The zoomed proposals are accepted as a direction; they are not yet a slice.
+
+---
+
+**◇ OWNER'S RULING — THE DRONE GOES. 2026-09-04.**
+
+Shambu, on the shipped build: *"I want to remove the tuuuuuuuuuuuuuu background
+sound that's on each of the sound themes, it's so noisy... let's just fix the
+handpan version first. just a combination of notes playing... currently, it's
+just very boring noise which I cant listen to more than a few seconds."*
+
+**Named precisely, for the first time.** The "tuuuu" is the **GROUND role** —
+`contrabass`, sustained, in every one of the five lenses — with the **CHORD**
+role (`vibraphone-bowed` / `strings-cello`) sustaining underneath it. It is
+continuous by construction: GROUND is what the design has always called the bed.
+Every monotony verdict in this log — "a single note playing in the background"
+(3.5), "one huge note" (A2), "the background note sounds like noise" (A3), "one
+note running throughout" (2026-09-01) — has been the same finding, four times,
+about the same two roles. HQ kept diagnosing the *layers above* the bed. The
+owner has now said it is the bed.
+
+**RULED: the bed is no longer assumed.** A lens may have no GROUND at all. The
+next slice builds the handpan lens as *notes only* and the other four are held
+untouched until that one is right. "Add layers later if required" is the order of
+work: earn each layer against the ear, do not start from five and subtract.
+
+**HQ SKETCHED IT RATHER THAN BRIEFING IT** (the sketch-first rule, A3). Same
+tonight score, same real sky, same pitches, roles filtered, rendered through the
+existing Node renderer at the Ground lens: figuration alone (264 events),
++ lead (296), + a quiet chord (326), 110 s each, sent for the ear. Measured: the
+40–220 Hz band that carried the drone drops from **0.06 to 0.004** of the
+midrange — the "tuuuu" is gone, not merely quieter. Handpan-alone plays **24% in
+actual silence**; whether that reads as space or as emptiness is the question
+the sketches ask.
+
+**STRUCTURAL CONSEQUENCE, FLAGGED NOW:** `figurationOverGround` and
+`figurationOverChord` are mix-law margins measured against stems a bedless lens
+does not have. The law must become conditional on which roles a lens declares,
+not silently pass or silently divide by a missing stem. That is a real change to
+a ratified surface and it needs its own brief. HALT for the ear.
