@@ -146,6 +146,7 @@ export function mountApp(container: HTMLElement): void {
   let cities: City[] = [];
   let session: Session | null = null;
   const starfield = new Starfield(canvas, { lowPower: state.lowPower });
+
   let frame = 0;
   let lastDraw = 0;
   let revealStart = 0;
@@ -501,9 +502,19 @@ export function mountApp(container: HTMLElement): void {
     const panelHeight = panel.hidden ? 0 : panel.getBoundingClientRect().height;
     const topBar = container.querySelector('.topbar');
     const topHeight = topBar ? topBar.getBoundingClientRect().height : 0;
-    // Both backdrops fade out toward the sky, so neither fully occludes what is
-    // behind it — roughly three-quarters of the panel and half the title area.
-    starfield.setOcclusion(panelHeight * 0.72, topHeight * 0.5);
+    // THE PANEL'S FULL HEIGHT, not a fraction of it (Slice B3).
+    //
+    // This was `panelHeight * 0.72`, on the reasoning that the panel's backdrop
+    // fades toward the sky so it does not fully occlude. True of the WASH, and
+    // irrelevant to the CONTROLS: the Tonight pill is opaque, it sits at the top
+    // of the panel, and 0.72 put the southern horizon and its `S` mark behind
+    // it on every screen the product ships on. A control that covers the dome
+    // covers it whatever the gradient behind it is doing.
+    //
+    // The title area keeps its half, because it is genuinely a wash: left-
+    // aligned text over a gradient that reaches transparent well before the
+    // dome's northern rim, and nothing interactive lives in it.
+    starfield.setOcclusion(panelHeight, topHeight * 0.5);
   };
 
   if (typeof ResizeObserver === 'function') {
@@ -616,6 +627,21 @@ export function mountApp(container: HTMLElement): void {
       get leadScreen(): { x: number; y: number } | null {
         return starfield.leadScreen;
       },
+      /**
+       * WHERE THE DOME ACTUALLY IS (Slice B3).
+       *
+       * The frame's rule — nothing occludes the horizon circle or its cardinals
+       * — is arithmetic on `fitViewport`, and `test/frame.test.ts` asserts it
+       * there. What a unit test cannot see is whether the APP hands `fitViewport`
+       * the right numbers, and that is exactly where the B2 defect lived: the fit
+       * was correct and it was being told the panel was 72% of its real height.
+       * So `e2e/b3-ux.spec.ts` reads the live geometry and checks it against the
+       * live panel rectangle.
+       */
+      get dome(): { width: number; height: number; cx: number; cy: number; radius: number } {
+        const { width, height, cx, cy, radius } = starfield.view;
+        return { width, height, cx, cy, radius };
+      },
       resetStats: () => starfield.resetStats(),
       stop: () => {
         cancelAnimationFrame(frame);
@@ -697,11 +723,21 @@ const SHELL_HTML = `
           `<button type="button" data-lens="${lens.id}" aria-pressed="false" title="${lens.homage}">${lens.title}</button>`,
       ).join('')}
     </div>
-    <p class="lens-note" id="lens-note"></p>
 
-    <p class="compression" id="compression-line"></p>
-    <p class="honesty" id="honesty"></p>
-    <p class="honesty subtle" id="timezone-note" hidden>${TIMEZONE_CAVEAT}</p>
+    <!--
+      The words, wrapped. On a phone this changes nothing — they stack as they
+      always did. On a wide screen the panel is a BAND rather than a centred
+      column (Slice B3), and a band needs its prose to be one grid cell it can
+      set beside the controls instead of four more full-width rows pushing the
+      sky up the screen.
+    -->
+    <div class="words">
+      <p class="lens-note" id="lens-note"></p>
+      <p class="compression" id="compression-line"></p>
+      <p class="honesty" id="honesty"></p>
+      <p class="honesty subtle" id="timezone-note" hidden>${TIMEZONE_CAVEAT}</p>
+    </div>
+
     <div class="footer-row">
       <button type="button" id="low-power" class="ghost tiny" aria-pressed="false">Low power: off</button>
     </div>

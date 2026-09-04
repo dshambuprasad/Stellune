@@ -181,6 +181,17 @@ h1 {
   max-width: var(--panel-max);
 }
 
+/*
+ * The words, as a block. In the phone column they stack exactly as the four
+ * paragraphs used to; the wrapper exists so the desktop band has one cell to
+ * put them in. `gap` replaces the margins the paragraphs never had.
+ */
+.words {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
 .progress {
   display: flex;
   align-items: center;
@@ -484,6 +495,150 @@ h1 {
   25% { content: '.'; }
   50% { content: '..'; }
   75% { content: '...'; }
+}
+
+/* ---- the band ----------------------------------------------------------- */
+
+/*
+ * SLICE B3 — THE CONTROLS ARE A QUIET BAND, NOT A CENTRED COLUMN.
+ *
+ * What shipped at B2: a 38rem column of controls floating in the middle of a
+ * 1440 px screen with roughly a third of the viewport left as empty margin, and
+ * a dome kept small by the 230 px of vertical space that column cost. Two
+ * separate wrongs from one layout — the sky was not given the room the screen
+ * had, and the chrome was given more than it needed.
+ *
+ * So above 48rem the panel spreads: tabs at the left, lenses in the middle, Play
+ * at the right, the honest words along the bottom beside the low-power toggle.
+ * The same elements, the same order in the DOM, about 100 px tall instead of
+ * 230 — and every pixel that buys goes to the dome, because `fitDome` measures
+ * the panel rather than guessing at it.
+ *
+ * A band, not a bar: the backdrop still fades upward into the night, and the
+ * controls still float over a sky that runs edge to edge behind them.
+ */
+@media (min-width: 48rem) {
+  /* Two and a half centimetres of pure gradient above the sky. On a phone that
+     padding separates the title from a dome that starts immediately below it;
+     on a desktop the dome's northern rim is nowhere near the title, so it is
+     only height the sky is not getting. */
+  .topbar {
+    padding: 1.2rem 1.6rem 1.2rem;
+  }
+
+  .panel {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      'progress progress progress'
+      'tabs     lenses   play'
+      'fields   fields   fields'
+      'words    words    power';
+    align-items: center;
+    column-gap: 1.6rem;
+    /* ZERO, and the spacing comes from the rows themselves.
+       `grid-template-areas` declares four rows, two of which (the progress bar
+       and the Birth Sky fields) are `hidden` most of the time. A hidden item
+       leaves a zero-height row — but `row-gap` is still charged for it, so a
+       0.5rem gap was costing 24 px of empty band in Tonight mode and only 8 of
+       them were between anything. Margins are not charged for rows that are not
+       there. */
+    row-gap: 0;
+    padding: 0.7rem clamp(1.4rem, 3.5vw, 3rem) calc(0.75rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  .progress {
+    margin-bottom: 0.4rem;
+  }
+
+  .birth-fields {
+    margin: 0.45rem 0 0.15rem;
+  }
+
+  .words {
+    margin-top: 0.45rem;
+  }
+
+  /* The column's max-width is what made it a column. */
+  .panel > * {
+    width: auto;
+    max-width: none;
+  }
+
+  .progress {
+    grid-area: progress;
+  }
+
+  /* The wrapper stops being a box and lets its two buttons take their own
+     places in the band — tabs hard left, Play hard right, sky between them. */
+  .controls {
+    display: contents;
+  }
+
+  .tabs {
+    grid-area: tabs;
+    justify-self: start;
+  }
+
+  .play {
+    grid-area: play;
+    justify-self: end;
+    margin-left: 0;
+  }
+
+  .lenses {
+    grid-area: lenses;
+    justify-content: center;
+  }
+
+  .birth-fields {
+    grid-area: fields;
+    max-width: 46rem;
+    justify-self: start;
+    width: 100%;
+  }
+
+  /* The lens note leads, the honesty label runs beside it rather than under it.
+     Two lines of quiet type across the foot of the screen instead of five. */
+  /* The words run ALONG the band rather than stacking under it: the lens note
+     leads at the left, the honesty label takes the width it needs to be two
+     quiet lines instead of five. Every row this saves is a row the dome gets. */
+  .words {
+    grid-area: words;
+    display: grid;
+    /* Wide enough for the longest lens note on one line — "Aurora — Bowed
+       strings, glass and chimes. Huge, slow swells." — because the ellipsis
+       that a narrower column produces reads as a truncation bug, not as a
+       nicety being dropped. */
+    grid-template-columns: minmax(0, 25rem) minmax(0, 1fr);
+    column-gap: 2rem;
+    row-gap: 0.2rem;
+    align-items: start;
+  }
+
+  .lens-note,
+  .compression {
+    grid-column: 1;
+    margin: 0;
+    /* One line. The full palette is a nicety; the lens's name is not, and a
+       second line here costs the sky more than it is worth. */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .honesty {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    font-size: 0.7rem;
+    line-height: 1.45;
+  }
+
+  .footer-row {
+    grid-area: power;
+    justify-self: end;
+    align-self: end;
+  }
 }
 
 /* ---- phones ------------------------------------------------------------ */

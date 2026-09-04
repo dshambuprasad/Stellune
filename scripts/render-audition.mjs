@@ -7,7 +7,13 @@
  *
  * These are the clips that go to the ear gate, so they are all printed from the
  * SAME window of the SAME score: the only thing that differs between them is
- * the lens. Default window is t=360–420 s of the birth session, chosen because
+ * the lens.
+ *
+ * AN AUDITION PUBLISHES NOTHING. It never passes `--publish-calibration`, so no
+ * clip printed here can re-level the shipping app — see `render-score.mjs`, and
+ * the regression test in `test/calibration.test.ts`.
+ *
+ * Default window is t=360–420 s of the birth session, chosen because
  * it is the densest minute in the A3 score — 82 figuration onsets, 7 lead
  * phrases and 30 chord voices, all five roles fully present. The opening
  * gesture (t=0) is the more beautiful minute, but it is one star answered by a

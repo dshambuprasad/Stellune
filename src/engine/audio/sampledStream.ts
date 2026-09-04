@@ -67,6 +67,7 @@ import {
   SEND_LEVELS,
   isCalibrated,
   loadCalibration,
+  masterTrimDb,
   type MixCalibration,
 } from './mixLaw.ts';
 
@@ -563,23 +564,41 @@ class ToneSampledStream implements SampledStream {
   }
 
   /**
-   * The master trim, in dB, that puts the mix on its LUFS target.
+   * The master trim, in dB: `min(loudness trim, peak-safe trim)`.
    *
-   * Loudness, not peak. Peak normalisation rewards crest factor rather than
-   * level: a sparse early sky and a full late one can share a peak and still
-   * differ by several dB of perceived loudness, which for a piece meant to hold
-   * a steady calm is precisely the wrong thing to hold constant.
+   * Loudness sets the aim. Peak normalisation alone rewards crest factor rather
+   * than level — a sparse early sky and a full late one can share a peak and
+   * still differ by several dB of perceived loudness, which for a piece meant to
+   * hold a steady calm is the wrong thing to hold constant.
+   *
+   * BUT A CEILING OUTRANKS AN AIM (Slice B3, Ruling 1). From B1 to B2 this was
+   * the loudness trim alone, and this graph — not just the renderer — drove
+   * embrace to +2.57 dBFS and pulse to +2.96 dBFS: hard clipping, in the app, on
+   * every listen. Both measurements come from `calibration.json` and the
+   * arithmetic is `masterTrimDb` in `scripts/lib/mixlaw.mjs`, the same function
+   * `render-score.mjs` calls, because a law that each path implements for itself
+   * is not a law.
+   *
+   * There is deliberately NO limiter here to buy the target back. Transient
+   * limiting lives on the transient-carrying stems by the B1.1 amendment; a
+   * master brick-wall would put a compressor across the bed by the side door.
+   * When the peak trim binds, this lens simply plays under −18 LUFS, and
+   * `check-mix-law` reports how far under.
    */
   #masterTrimDb(): number {
     const target =
       this.#plan.config.mode === 'birth-sky'
         ? this.#mastering.lufsTargets.birthSky
         : this.#mastering.lufsTargets.tonight;
-    const reference =
-      this.#calibration.lenses[this.#lens]?.measuredLufs ??
-      DEFAULT_CALIBRATION.lenses._fallback?.measuredLufs ??
-      target;
-    return target - reference;
+    const measured = this.#calibration.lenses[this.#lens];
+    const fallback = DEFAULT_CALIBRATION.lenses._fallback;
+    return masterTrimDb({
+      lufsTarget: target,
+      measuredLufs: measured?.measuredLufs ?? fallback?.measuredLufs ?? target,
+      measuredPeakDbfs: measured
+        ? measured.measuredPeakDbfs
+        : fallback?.measuredPeakDbfs,
+    });
   }
 
   // ------------------------------------------------------------ scheduling

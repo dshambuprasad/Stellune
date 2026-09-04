@@ -29,8 +29,16 @@ import {
   type ScheduleEvent,
   type ScheduledVoice,
 } from '../scripts/lib/schedule.mjs';
-import { ROLE_SHAPING } from '../scripts/lib/mixlaw.mjs';
 import {
+  MASTER,
+  ROLE_SHAPING,
+  WINDOW_TOLERANCE_BY_ROLE,
+  WINDOW_TOLERANCE_DB,
+  masterTrimDb,
+  windowToleranceFor,
+} from '../scripts/lib/mixlaw.mjs';
+import {
+  MASTERING_DEFAULTS,
   chooseVoice,
   shadingTiltDb,
   validateEqLanes,
@@ -249,6 +257,21 @@ describe('THE MASTERING LAW, as configured', () => {
     expect(configured.figurationGlue.maxReductionDb).toBeLessThanOrEqual(2);
   });
 
+  it('the typed defaults state the same limiter engagement as the config, so neither can drift', () => {
+    // These two had already drifted: `MASTERING_DEFAULTS` sat at the original
+    // 0.01 while `lenses.json` had been ratified to 0.10, and nothing said so.
+    // A default that disagrees with the law is a second law nobody reviewed.
+    expect(MASTERING_DEFAULTS.limiter.maxEngagedFraction).toBe(
+      masteringFor(lenses).limiter.maxEngagedFraction,
+    );
+    expect(MASTERING_DEFAULTS.limiter.maxReductionDb).toBe(
+      masteringFor(lenses).limiter.maxReductionDb,
+    );
+    expect(MASTERING_DEFAULTS.limiter.zeroEngagementStems).toEqual(
+      masteringFor(lenses).limiter.zeroEngagementStems,
+    );
+  });
+
   it('states the RATIFIED limiter amendment, not the original 0%', () => {
     // 2026-08-10. Transient limiting is permitted — that is what limiters are
     // for — but the sustained bed is protected absolutely, and that protection
@@ -265,9 +288,82 @@ describe('THE MASTERING LAW, as configured', () => {
     // zero. Pinned here so a relaxation has to be a deliberate edit to a test
     // that says why, rather than a config tweak nobody reviews.
     const { limiter } = masteringFor(lenses);
-    expect(limiter.maxEngagedFraction).toBe(0.1);
+    expect(limiter.maxEngagedFraction).toBe(0.15);
     expect(limiter.maxReductionDb).toBe(3);
     expect(limiter.zeroEngagementStems).toEqual(['ground', 'chord']);
+  });
+
+  it('RULING 3 (2026-09-04): engagement 15%, because on struck material the fraction tracks note density and DEPTH is the audible constraint', () => {
+    // The third value this number has had. 0% -> 1% -> 10% -> 15%, and the first
+    // three were all set before anyone had measured post-fix figuration: a
+    // kalimba or glockenspiel weave asks the look-ahead limiter for a bounded
+    // catch on every strike, so the FRACTION counts strikes, not squash.
+    //
+    // HQ's own note, pinned here because it is the operative part of the ruling:
+    // this number should not move a fourth time without evidence that something
+    // is AUDIBLE. The two numbers that protect the music did not move and are
+    // asserted beside it — 3 dB of depth, and the bed's structural zero.
+    const { limiter } = masteringFor(lenses);
+    expect(limiter.maxEngagedFraction).toBe(0.15);
+    expect(limiter.maxReductionDb).toBe(3.0);
+    expect(limiter.zeroEngagementStems).toEqual(['ground', 'chord']);
+  });
+
+  it('RULING 2 (2026-09-04): the ±8.0 dB window bound is the CHORD\'s alone — it carries the arc; every other role stays at ±5.5', () => {
+    // A bed stem dipping 7.8 dB at one instant of an eleven-minute composed arc
+    // is the arc breathing, and the chord is the layer that does the breathing:
+    // it thickens as the sky fills and thins as it empties. B1.1 diagnosed this
+    // and the master peak as one cause; that was wrong, and the correction is
+    // ratified.
+    //
+    // Pinned per role, because a bound widened for one role's musical reason is
+    // a ruling and a bound widened for all of them is a bound switched off.
+    expect(windowToleranceFor('chord')).toBe(8.0);
+    expect(WINDOW_TOLERANCE_BY_ROLE).toEqual({ chord: 8.0 });
+    for (const role of ['ground', 'figuration', 'lead', 'weather']) {
+      expect(windowToleranceFor(role), `${role} must stay at the general bound`).toBe(5.5);
+    }
+    expect(WINDOW_TOLERANCE_DB).toBe(5.5);
+  });
+
+  it('RULING 1 (2026-09-04): the master fader is min(loudness, peak-safe to −1.0 dBFS), and the same function serves both paths', () => {
+    // The defect this closes: embrace printed at +2.57 dBFS and pulse at +2.96
+    // dBFS — hard clipping, shipping since B1, in the LIVE GRAPH as much as in
+    // the renderer, because B1.1 made the fader the loudness trim "full stop".
+    //
+    // Both paths import this one function (`render-score.mjs` and
+    // `sampledStream.ts`), so the test does not compare two derivations and
+    // hope; it pins the one derivation, exactly as the schedule tests above do.
+    expect(MASTER.peakCeilingDbfs).toBe(-1.0);
+
+    // Embrace, as measured at B2: +8.07 dBFS peak over −12.50 LUFS at unity
+    // master. Loudness alone would ask for −5.50 dB and print +2.57.
+    expect(
+      masterTrimDb({ lufsTarget: -18, measuredLufs: -12.5, measuredPeakDbfs: 8.07 }),
+    ).toBeCloseTo(-9.07, 2);
+
+    // A mix with headroom to spare is untouched by the ceiling and lands on the
+    // loudness target — the peak guard must not become a second fader.
+    expect(
+      masterTrimDb({ lufsTarget: -18, measuredLufs: -12.0, measuredPeakDbfs: -6.0 }),
+    ).toBeCloseTo(-6.0, 6);
+
+    // The ceiling is a CEILING: applying the trim lands the peak at −1.0, never
+    // above it, whichever of the two rules bound the fader.
+    for (const [lufs, peak] of [
+      [-12.5, 8.07],
+      [-12.3, 8.66],
+      [-12.08, 3.71],
+      [-12.17, 5.54],
+    ] as Array<[number, number]>) {
+      const trim = masterTrimDb({ lufsTarget: -18, measuredLufs: lufs, measuredPeakDbfs: peak });
+      expect(peak + trim).toBeLessThanOrEqual(MASTER.peakCeilingDbfs + 1e-9);
+    }
+
+    // No measurement is not the same as no peak — an unmeasured lens falls back
+    // to the loudness trim, and `mixLaw.ts` gives the fallback an explicit peak
+    // rather than letting `undefined` silently disable the guard.
+    expect(masterTrimDb({ lufsTarget: -18, measuredLufs: -12.0 })).toBeCloseTo(-6.0, 6);
   });
 
   it('carves the pads and lifts the moving parts, in every lens', () => {

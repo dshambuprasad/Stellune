@@ -1975,3 +1975,308 @@ number HQ has just set.**
 UX shots. Three rulings wanted: the master peak (a real, shipping clip), the
 chord window bound, and whether 10% survives contact with post-fix figuration.
 HALT.
+
+**◇ HQ REVIEW GATE — SLICE B2, 2026-09-04. PASSED, with three rulings.**
+
+HQ verified rather than read. Independent clone, independent `npm ci` + full
+suite: **403/403 green**. The d3-celestial file was re-downloaded from the pinned
+commit `d2e20e10` and hashed: `294f66be…` matches the recorded SHA-256 exactly —
+the licence chain is sound and the GPL skyculture exclusion is documented where
+it needs to be. The arrival was re-measured **from the audio**, not from the log:
+−27.5 dBFS for the first ~18 s, climbing to −16.9 dBFS by 50–60 s (**10.6 dB**),
+onsets 1 → 3 → 9–10 per ten seconds as the figuration enters. Endless mode has a
+beginning. And after the merge HQ drove the shipped build headlessly: Aurora
+default confirmed by `aria-pressed`, **68 sample files, zero failures, zero
+console errors**, figures and standing names rendering, 4,384 stars up.
+
+The starfield is the largest visible gain of the project to date, and the phone
+capture is the first screen in this build that looks like the thing we said we
+were making.
+
+**RULING 1 — THE MASTER PEAK. A peak ceiling outranks a loudness target.**
+embrace **+2.57 dBFS**, pulse **+2.96 dBFS** is hard clipping in the live graph;
+it has been shipping since B1 and deleting the offline limiter revealed it rather
+than caused it. The master trim becomes `min(LUFS trim, peak-safe trim to −1.0
+dBFS)`, identical in both paths. **−18 LUFS is hereby a target, not an
+invariant**; report the resulting per-lens loudness spread rather than hiding it.
+Do not solve this with a master limiter: the B1.1 amendment put limiting on
+transient-carrying stems for a reason, and a master brick-wall would put a
+compressor back across the bed by the side door.
+
+**RULING 2 — CHORD WINDOW BOUND → ±8.0 dB, chord role only.** Everything else
+stays ±5.5. A bed stem dipping 7.8 dB at one instant of an eleven-minute composed
+arc is the arc breathing. B1.1's "one cause" diagnosis of these two was wrong and
+the correction is accepted.
+
+**RULING 3 — FIGURATION LIMITER ENGAGEMENT 10% → 15%.** `maxReductionDb` stays
+3.0; the bed stays at ZERO, structurally. On struck material the engagement
+*fraction* tracks note density, not squash — depth is the audible constraint. HQ
+notes for the record that this number has now moved twice and that both earlier
+values were set before anyone had measured post-fix figuration. It should not
+move a third time without evidence that something is audible.
+
+**NOT RATIFIED, AND NOT TO BE ABSORBED QUIETLY:** the renderer writing
+`public/samples/calibration.json` as a side effect of an audition is a defect
+that can ship a wrong mix. It is in the next brief.
+
+**HQ's own visual findings, for B3:** the dome and the controls overlap (the `S`
+cardinal sits behind the Tonight pill); roughly a third of the desktop viewport
+is empty margin; the zoomed state is the weakest screen in the app — sparse,
+soft, with figures running off-frame and no sense of place; and bright stars
+crowded near the horizon collide their labels (`Rigil Kentaurus` / `Hadar` /
+`Mimosa` overprint in the shipped build).
+
+**OPEN FOR SHAMBU'S EAR:** after the arrival hands over at 105 s the level
+settles to −23/−24 dBFS and reaches −26 by 130 s — quieter than the arrival's
+own peak by ~9 dB. That is the true sky driving the envelope, and it may be
+right. Whether it reads as *repose* or as *the piece dying* is his call, and no
+one should build a fix for it before he has said which.
+
+---
+
+## SLICE B3 — PEAK-SAFE, AND THE FRAME (2026-09-04)
+
+Three ratified rulings, one defect HQ refused to absorb quietly, and the first
+serious work on the screen since Phase 4. `main` was clean and level with
+`origin/main`; `docs/a4-h1.wav` and `docs/a4-h2.wav` (116 MB of A4 scratch) are
+gone, the merged `slice-b2-first-impressions` branch is deleted, and the HQ
+review-gate entry above is committed with this slice rather than left dangling.
+
+### RULING 1 — THE MASTER PEAK. The ceiling outranks the target.
+
+`min(LUFS trim, peak-safe trim to −1.0 dBFS)`, and — the part that matters —
+**computed in one function that both paths import**, `masterTrimDb` in
+`scripts/lib/mixlaw.mjs`. That is the actual lesson of this defect. B1.1 made
+the fader "the loudness fader, full stop" in the renderer, the live graph was
+written to match by hand, and neither of them was wrong on its own terms; what
+was wrong is that there were two of them. `render-score.mjs` and
+`sampledStream.ts` now call the same function with the same two measurements.
+
+The live graph could not have applied a peak-safe trim even if it had wanted to,
+because `calibration.json` carried only `measuredLufs`. It now carries
+`measuredPeakDbfs` beside it, and the file has been republished. What that
+changed, in the app, per lens:
+
+| lens | unity peak | old fader (loudness) | printed | new fader | printed |
+|---|---|---|---|---|---|
+| aurora | +1.61 | −5.54 | −3.9 | −5.54 | −3.9 |
+| embrace | +6.88 | −4.40 | **+2.48** | −7.88 | −1.0 |
+| sonata | +1.59 | −5.38 | −3.8 | −5.38 | −3.8 |
+| pulse | +8.66 | −4.87 | **+3.79** | −9.66 | −1.0 |
+| ground | +4.72 | −4.78 | **−0.06** | −5.72 | −1.0 |
+
+**Three of five lenses were clipping in the browser and are not any more.** The
+two that were not are untouched — the peak guard is a ceiling, not a second
+fader, and it must not quietly cost loudness on material that never needed it.
+
+**−18 LUFS is now a target, not an invariant**, and the checker publishes the
+consequence rather than hiding it. On the ratified score the spread is **4.0 dB**
+(−22.0 to −18.0 LUFS, 3 of 5 peak-bound). `check-mix-law` prints that table and
+writes `loudnessSpreadDb` into the JSON, so the next person to widen the gap has
+to do it in front of a number.
+
+**No master limiter, and the headroom check is now structural.** `maxPeakDbfs`
+was −0.3, a tolerance around a peak nobody was aiming at, and it passed while
+embrace printed +2.6. It is −1.0 now, the same number the fader targets, with a
+0.01 dB epsilon for one float multiply and nothing else.
+
+An uncalibrated lens gets an explicit `measuredPeakDbfs` in `mixLaw.ts` rather
+than `undefined`: 21 dB of crest over its assumed loudness, the widest measured
+across the five lenses. "Not measured" must not silently mean "not guarded",
+which is the shape of the bug this whole ruling is about.
+
+### RULINGS 2 AND 3, as ratified — and what they were worth
+
+**Chord window bound → ±8.0 dB, CHORD ROLE ONLY.** `WINDOW_TOLERANCE_BY_ROLE`
+holds exactly one entry and `windowToleranceFor()` is what the checker asks;
+every other role reads ±5.5 from the same call. The two failures this was
+ratified for now read:
+
+```
+embrace  chord worst window -7.8 dB at t=210s  (±8 — the chord carries the arc)
+sonata   chord worst window -7.7 dB at t=210s  (±8 — the chord carries the arc)
+```
+
+0.2 dB of margin. That is tight enough to be worth saying out loud: this bound
+is not comfortable, it is *just* sufficient, and the next carve that deepens will
+land on it.
+
+**Figuration limiter engagement 10% → 15%**, `maxReductionDb` unchanged at 3.0,
+`zeroEngagementStems` unchanged and still structural. The worst engagement
+measured across all five lenses on the ratified score is now **4.5%** — the
+10.535% that failed at B2 was on the ground lens, and the honest trims that
+caused it have not moved. Both numbers are pinned in `test/schedule.test.ts` in
+tests named for their reasoning, including HQ's own note that this figure has
+moved twice and should not move a third time without evidence of something
+audible.
+
+One thing found on the way: `MASTERING_DEFAULTS` in `samplerLenses.ts` still said
+`maxEngagedFraction: 0.01` — it had never been moved to the ratified 0.10 — while
+its own docstring claims it states the same law as `lenses.json`. Both are 0.15
+now, and a new test asserts the two agree rather than trusting the comment.
+
+### THE MIX LAW, MEASURED — and the two failures that are NOT mine to tune
+
+**The ratified surface is fully green.** `npm run check:mix-law` on
+`docs/a3-score.json · birth`, which is what CI gates and what B2's six remaining
+failures were counted on: **PASS**, all five lenses, evidence in
+`docs/b3-mix-law.json`. The six are gone — three master peaks (Ruling 1), two
+chord windows (Ruling 2), one figuration engagement (Ruling 3).
+
+I then ran the same checker against `docs/b2-tonight-score.json · endless`, which
+no slice has ever measured, because the app plays a tonight sky and the mix law
+had only ever been asserted on a birth score. **It fails two checks, and I have
+not touched a number to make either of them pass:**
+
+1. **`sonata`: figuration leads chord by −1.4 dB in 700–5000 Hz** (needs ≥ 0).
+   The motion is *behind* the bed in the band where the motion sings, on one
+   lens, on the tonight score only — on the birth score the same lens leads by
+   +1.1 dB. An EQ-lane failure, not a levels failure, and nothing in this slice
+   touches EQ.
+2. **`pulse`: lead worst window −7.4 dB at t=210s** against ±5.5. This is the
+   LEAD, not the chord. Ruling 2 was deliberately chord-only and I am not going
+   to widen it by the side door because a second role turned out to want it too.
+   Whether the lead's swing on the tonight score is the arc breathing or a
+   defect is the same question HQ answered for the chord, and it needs the same
+   answer from the same people.
+
+**And a number HQ should see before it decides:** on the tonight score the
+loudness spread under Ruling 1 is **10.8 dB** (−28.8 to −18.0 LUFS, 4 of 5
+peak-bound). Pulse's stem bus peaks at **+16.0 dBFS** there against an RMS of
+about −20 — a crest factor of 36 dB, far beyond anything the birth score shows.
+Ruling 1 is behaving exactly as ratified; what it has surfaced is that on this
+material the peak ceiling costs an enormous amount of level, and "a target, not
+an invariant" reads differently at 10.8 dB than it does at 4.0. Evidence in
+`docs/b3-mix-law-tonight.json`. **Flagged, not fixed, not tuned.**
+
+### THE CALIBRATION SIDE EFFECT — closed
+
+`render-score.mjs` wrote `public/samples/calibration.json` at the end of every
+run, so printing an audition clip re-levelled the shipping app from a birth
+score's densest minute. Publication is now an act: `writeCalibration` takes its
+destination explicitly, `main()` calls it only under `--publish-calibration`, and
+`npm run calibrate` remains the deliberate path. An audition passes no such flag
+and now prints `calibration NOT written (audition render)`.
+
+`test/calibration.test.ts` pins the decision rather than the audio, so it runs in
+the unit suite on every push with no ffmpeg: the audition's own argv parses to
+`publishCalibration: false`, the flag has to be spelled out to be true, the
+audition script's source contains no route to it, and `writeCalibration` into a
+temp file leaves the live file byte-identical.
+
+### THE FRAME
+
+**(a) Nothing occludes the horizon circle or its cardinals.** Two separate
+mistakes, and both are now structural rather than watched:
+
+* The dome was fitted to `panelHeight * 0.72` — the panel's gradient does fade,
+  but the Tonight pill is opaque and sits at the *top* of the panel. The fit gets
+  the panel's full height now. A control that covers the dome covers it whatever
+  the gradient behind it is doing.
+* The cardinal ring was reserved nowhere. `fitViewport` was insetting the radius
+  by 0.94 and `#paintHorizon` was drawing glyphs at `radius + 13`, two numbers
+  written in two files. `CARDINAL_MARGIN_PX` is now reserved by the fit and
+  `CARDINAL_OFFSET_PX` imported by the painter. On a 390 px phone this also fixes
+  something nobody had reported: `E` and `W` fell outside the viewport and were
+  silently skipped by the painter's own bounds check — a compass missing two of
+  its four answers.
+
+**(b) The controls are a band, not a centred column.** Above 48rem the panel
+spreads across the frame: tabs left, lenses centre, Play right, the honest words
+along the foot beside the low-power toggle. Same elements, same DOM order.
+Measured on the 1440×900 capture viewport:
+
+| 1440×900 | B2 | B3 |
+|---|---|---|
+| panel height | 243 px | **105 px** |
+| topbar height | 114 px | **91 px** |
+| dome diameter | 628 px | **702 px** |
+| dome + cardinal ring vs the free band | **105%** — it did not fit | **100%** — it fits exactly |
+| `S` mark | **61 px inside the panel** | clear |
+
+That 105% is defect (a) and defect (b) as one number: the dome was *larger* than
+the space actually left for it, and looked small anyway, because the 0.72 fudge
+was spending 61 px of it underneath the controls. The dome is now bound by the
+chrome and by nothing else, to the pixel — which makes "the sky is small" a
+statement about the chrome from here on.
+
+The phone, measured the same way: panel 225 → 223 px, dome 367 → 342 px, `S` was
+**32 px inside the panel** and is now clear, and `E`/`W` sat at x = −1 and x =
+391 on a 390 px screen — both off-frame, both silently skipped by the painter's
+own bounds check. All four cardinals are in the frame for the first time, and the
+dome plus its ring is exactly the width of the screen.
+
+A phantom cost found while measuring: `grid-template-areas` declares four rows,
+two of which (`progress`, `birth-fields`) are `hidden` in Tonight mode — and
+`row-gap` is charged for a hidden row. 24 px of empty band, of which 8 px was
+between anything. Row spacing is margins now.
+
+**(c) Label collision avoidance.** `placeLabels()` is a pure function, extracted
+from the painter for the specific reason that where a word goes is a decision
+worth testing and a canvas is not needed to make it. Brightest first; four
+placements offered per name (right, left, above, below); first one that is inside
+the frame and clear of everything already placed wins; a name with nowhere clear
+is **dropped, not drawn faintly or clipped**. The LEAD's box is reserved before
+any standing name is considered, so the LEAD always wins by construction rather
+than by luck. HQ's own three — `Rigil Kentaurus`, `Hadar`, `Mimosa` — are tested
+directly: at their real separation all three now get their own place, and stacked
+on one pixel the faintest is the one that goes.
+
+### THE ZOOMED STATE — diagnosed, NOT redesigned
+
+HQ is right that it is the weakest screen in the app. `docs/b3-ux-zoomed-*.png`
+is the same frame as B2's, and here is what is actually wrong with it, in the
+order I would fix it:
+
+1. **Nothing chose what to look at.** The zoom is a camera transform about a
+   screen point. At 4× it lands wherever that point happened to be — in this
+   capture, the empty sky between Aquila and Sagittarius. There is no notion of
+   "zoom to a constellation" anywhere in the code.
+2. **Every reference to place leaves the frame at once.** The horizon ring, the
+   30° ring and all four cardinals are dome-scale objects; at 4× they are all
+   outside the viewport. The zoomed screen has no horizon, no compass, no
+   altitude reference and no constellation name. The dome's entire spatial
+   vocabulary is written for one zoom level.
+3. **The field gains no members.** `magLimit` is fixed at 6.6, so zooming
+   multiplies the spacing between the same stars. A real instrument shows you
+   *more* the closer you look; this shows you the same sky, further apart. That
+   is the "sparse".
+4. **The sprites are dome-scale.** A 4.6 px maximum radius grown by `zoom^0.4`
+   is an 8 px blurred disc with no core. That is the "soft".
+5. **The figures run off-frame because they are drawn segment by segment**,
+   with no name, no bounding box and no sense that a figure is a thing.
+6. **One standing name survives** — labels are first-magnitude only, a rule
+   tuned for a whole-sky view, and at 4× you can see one or two of the 21.
+
+**PROPOSED, for ratification, not built here:** a zoom that snaps its centre to
+the nearest constellation and names it; a horizon and cardinal set that survives
+zoom by pinning to the frame edge when the ring leaves it, so you always know
+which way you are facing; a magnitude limit that opens with zoom (6.6 → ~8.5 at
+4×) so looking closer shows more; a sharper core on the sprite at zoom; and a
+label magnitude limit that opens with it. Items 2 and 3 are the two that would
+change how the screen *feels*; item 1 is the one that changes what it is *for*.
+
+### WHAT ELSE IS TRUE
+
+* **422 unit tests green** (411 + 11 new), typecheck clean, production build
+  clean. New files: `test/frame.test.ts`, `test/calibration.test.ts`,
+  `e2e/b3-ux.spec.ts`, `scripts/render-score.d.mts`.
+* **The visual gate asserts, it does not only photograph.** `e2e/b3-ux.spec.ts`
+  reads the dome's live geometry out of `__cosmophony.dome` and checks it against
+  the panel's real rectangle, at rest AND while playing — because the panel grows
+  a progress row when a session starts, and a frame that is only correct at rest
+  is not correct. `test/frame.test.ts` asserts the same rule on `fitViewport`
+  itself, where a unit test can reach it.
+* **`e2e/b2-ux.spec.ts` now skips unless `B2_SHOT` is set.** Running the full e2e
+  suite for an unrelated reason rewrote B2's committed evidence with the current
+  build's layout; I restored it from git. A closed visual gate should not be
+  re-armed by `npx playwright test`.
+* **`e2e/perf.spec.ts` fails on this machine, before and after.** Frame budget
+  16.7 ms; clean pre-B3 tree measures **18.42 ms**, this tree measures
+  **18.04 ms**. Not a B3 regression — a machine that cannot hold 60 fps on a
+  4,300-star field. Reported rather than silenced or re-tuned.
+
+**HALT.** The ratified surface is green and the frame is fixed. Two things want
+HQ: the two tonight-score failures named above, which are outside all three
+rulings and which I have deliberately left failing; and the zoomed-state
+proposals, which are a design decision, not an implementation.

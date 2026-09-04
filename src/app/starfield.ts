@@ -24,7 +24,14 @@
  */
 
 import type { Camera, Viewport } from './projection.ts';
-import { CARDINALS, clampCamera, fitViewport, project, zenithRadius } from './projection.ts';
+import {
+  CARDINALS,
+  CARDINAL_OFFSET_PX,
+  clampCamera,
+  fitViewport,
+  project,
+  zenithRadius,
+} from './projection.ts';
 import type { RenderStar } from './starStyle.ts';
 import { StarSprites } from './starStyle.ts';
 
@@ -104,6 +111,131 @@ const FIGURE_ALPHA = 0.13;
 /** Lines fade out as their stars near the horizon, exactly as the stars do. */
 const FIGURE_EXTINCTION_DEGREES = 12;
 
+/**
+ * THE LABELS MUST NOT COLLIDE (Slice B3).
+ *
+ * HQ's finding on the shipped build: `Rigil Kentaurus`, `Hadar` and `Mimosa`
+ * overprinted each other low in the south. They are genuinely within a few
+ * degrees of one another, so this is not a projection bug — it is a chart with
+ * no idea that its words take up room. Twenty-one stars can carry a standing
+ * name and about ten are up at once, so the honest fix is small: give each name
+ * a box, try a few places for it, and if none is clear let the fainter of the
+ * pair go. A first-magnitude star with no name still reads as a star; three
+ * names on top of each other read as a rendering fault.
+ */
+export interface LabelBox {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+}
+
+interface LabelPlacement {
+  align: CanvasTextAlign;
+  x: number;
+  y: number;
+}
+
+/** A name wanting to be drawn: where its star is, and how bright that star is. */
+export interface LabelCandidate {
+  label: string;
+  x: number;
+  y: number;
+  /** The star's drawn half-size, so the name clears its own halo. */
+  radius: number;
+  /** Apparent magnitude — smaller is brighter, and brighter wins a collision. */
+  mag: number;
+}
+
+export type PlacedLabel<T extends LabelCandidate = LabelCandidate> = T & {
+  placement: LabelPlacement;
+};
+
+/**
+ * Decide where each name goes, and which names do not get drawn at all.
+ *
+ * Brightest first, so that when two names cannot both be placed it is the
+ * fainter that moves or goes. Each name is offered four positions — right of
+ * its star, left, above, below — and takes the first that is inside the frame
+ * and clear of everything already placed. A name with no clear position is
+ * dropped rather than drawn faintly or clipped: a first-magnitude star with no
+ * name still reads as a star, while three names on top of each other read as a
+ * rendering fault, which is exactly what `Rigil Kentaurus`, `Hadar` and
+ * `Mimosa` did in the shipped B2 build.
+ *
+ * `reserved` is how the LEAD always wins: its name is already on the canvas when
+ * this runs, and its box goes in before any of these are considered.
+ *
+ * Pure, and separated from the painting for that reason — where a word goes is
+ * a decision worth testing, and a canvas is not needed to make it.
+ */
+export function placeLabels<T extends LabelCandidate>(
+  candidates: readonly T[],
+  opts: {
+    width: number;
+    height: number;
+    measure: (text: string) => number;
+    reserved?: readonly LabelBox[];
+  },
+): Array<PlacedLabel<T>> {
+  const taken: LabelBox[] = [...(opts.reserved ?? [])];
+  const out: Array<PlacedLabel<T>> = [];
+
+  for (const item of [...candidates].sort((a, b) => a.mag - b.mag)) {
+    const textWidth = opts.measure(item.label);
+    const gap = item.radius + 5;
+    // Right of the star first, because that is where every one of these names
+    // has always been and a sky whose labels jump about is worse than one whose
+    // labels touch. Then left, then above, then below — a displacement of a few
+    // pixels rather than a redesign of where names live.
+    const placements: LabelPlacement[] = [
+      { align: 'left', x: item.x + gap, y: item.y },
+      { align: 'right', x: item.x - gap, y: item.y },
+      { align: 'center', x: item.x, y: item.y - gap - 6 },
+      { align: 'center', x: item.x, y: item.y + gap + 6 },
+    ];
+
+    for (const at of placements) {
+      const box = labelBox(at, textWidth);
+      // A name that runs off the frame is not placed there. On a 390 px phone
+      // Arcturus sits near the right rim and "Arcturus" became "A" — a
+      // truncated name reads as a bug in the sky rather than as a star near the
+      // edge.
+      if (box.left < 4 || box.right > opts.width - 4 || box.top < 2 || box.bottom > opts.height - 2) {
+        continue;
+      }
+      if (taken.some((other) => overlaps(box, other))) continue;
+      taken.push(box);
+      out.push({ ...item, placement: at });
+      break;
+    }
+  }
+  return out;
+}
+
+/** Half the height of an 11–12px name on a middle baseline. */
+const LABEL_HALF_HEIGHT_PX = 6;
+
+/**
+ * The box a name would occupy. Padded horizontally, because two names that
+ * merely fail to overlap still read as one word when they touch.
+ */
+function labelBox(at: LabelPlacement, textWidth: number, halfHeight = LABEL_HALF_HEIGHT_PX): LabelBox {
+  const pad = 3;
+  const left =
+    at.align === 'left' ? at.x : at.align === 'right' ? at.x - textWidth : at.x - textWidth / 2;
+  return {
+    left: left - pad,
+    right: left + textWidth + pad,
+    top: at.y - halfHeight,
+    bottom: at.y + halfHeight,
+  };
+}
+
+function overlaps(a: LabelBox, b: LabelBox): boolean {
+  return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+}
+
 export class Starfield {
   readonly canvas: HTMLCanvasElement;
   readonly #ctx: CanvasRenderingContext2D;
@@ -136,7 +268,23 @@ export class Starfield {
   /** Reused per frame: star id → where it was projected. No per-frame alloc. */
   readonly #figureScreen = new Map<string, { x: number; y: number; extinction: number }>();
   /** Reused per frame: the stars that earned a standing name and are on screen. */
-  #labelled: Array<{ label: string; x: number; y: number; radius: number; extinction: number }> = [];
+  #labelled: Array<{
+    label: string;
+    x: number;
+    y: number;
+    radius: number;
+    extinction: number;
+    /** Apparent magnitude — smaller is brighter, and brighter wins a collision. */
+    mag: number;
+  }> = [];
+  /**
+   * Where the LEAD's own name was drawn this frame, in CSS pixels, or null.
+   *
+   * Claimed BEFORE any standing name is placed, because the LEAD always wins:
+   * it is the star the music is speaking through, and a first-magnitude
+   * neighbour is not allowed to print over it.
+   */
+  #leadLabelBox: LabelBox | null = null;
 
   /** Rolling frame-time average, exposed for the performance note. */
   #frameMs = 0;
@@ -337,6 +485,7 @@ export class Starfield {
     let drawn = 0;
     this.#labelled.length = 0;
     this.#leadScreen = null;
+    this.#leadLabelBox = null;
     for (const rs of this.#stars) {
       if (rs.star.mag > magLimit) continue;
 
@@ -389,7 +538,7 @@ export class Starfield {
       // Collected, not drawn: text is `source-over` and the field is `lighter`,
       // and a name is only worth reading once the sky behind it is finished.
       if (rs.label !== null) {
-        this.#labelled.push({ label: rs.label, x, y, radius: half, extinction });
+        this.#labelled.push({ label: rs.label, x, y, radius: half, extinction, mag: rs.star.mag });
       }
 
       drawn++;
@@ -508,25 +657,33 @@ export class Starfield {
     if (this.#labelled.length === 0 || reveal <= 0) return;
 
     const width = this.#view.width;
+    const height = this.#view.height;
     ctx.save();
     ctx.globalCompositeOperation = 'source-over';
     ctx.font = '400 11px ui-serif, Georgia, "Times New Roman", serif';
     ctx.textBaseline = 'middle';
-    for (const item of this.#labelled) {
-      // The LEAD paints its own, brighter name in the same place.
-      if (this.#glow.leadStarId !== null && this.#glow.leadLabel === item.label) continue;
-      const alpha = 0.52 * reveal * item.extinction;
-      if (alpha < 0.01) continue;
 
-      // Flip to the star's left rather than run off the edge. On a 390 px
-      // phone Arcturus sits near the right rim and "Arcturus" became "A" — a
-      // truncated name is worse than no name, because it reads as a bug in the
-      // sky rather than as a star that happens to be near the edge.
-      const gap = item.radius + 5;
-      const flip = item.x + gap + ctx.measureText(item.label).width > width - 6;
-      ctx.textAlign = flip ? 'right' : 'left';
-      ctx.fillStyle = `rgba(214, 226, 246, ${alpha})`;
-      ctx.fillText(item.label, flip ? item.x - gap : item.x + gap, item.y);
+    // Only names that would actually be legible are offered a place — a name at
+    // 0.008 alpha still takes up room, and letting it push a visible one aside
+    // would be worse than not having it at all.
+    const wanted = this.#labelled.filter((item) => {
+      // The LEAD paints its own, brighter name in the same place.
+      if (this.#glow.leadStarId !== null && this.#glow.leadLabel === item.label) return false;
+      return 0.52 * reveal * item.extinction >= 0.01;
+    });
+
+    const placed = placeLabels(wanted, {
+      width,
+      height,
+      measure: (text) => ctx.measureText(text).width,
+      // The LEAD's name is already on the canvas and outranks all of these.
+      reserved: this.#leadLabelBox ? [this.#leadLabelBox] : [],
+    });
+
+    for (const item of placed) {
+      ctx.textAlign = item.placement.align;
+      ctx.fillStyle = `rgba(214, 226, 246, ${0.52 * reveal * item.extinction})`;
+      ctx.fillText(item.label, item.placement.x, item.placement.y);
     }
     ctx.restore();
   }
@@ -585,8 +742,11 @@ export class Starfield {
       // Nudge the glyph outside the ring.
       const dx = (p.x - cx) / (r || 1);
       const dy = (p.y - cy) / (r || 1);
-      const lx = cx + dx * (r + 13);
-      const ly = cy + dy * (r + 13);
+      // The same offset `fitViewport` reserves room for. Imported rather than
+      // written twice: a dome fitted for one number and drawn with another is
+      // how `S` came to sit behind the Tonight pill.
+      const lx = cx + dx * (r + CARDINAL_OFFSET_PX);
+      const ly = cy + dy * (r + CARDINAL_OFFSET_PX);
       if (lx < 4 || ly < 4 || lx > view.width - 4 || ly > view.height - 4) continue;
       ctx.fillStyle = `rgba(190, 205, 235, ${0.45 * fade})`;
       ctx.fillText(label, lx, ly);
@@ -634,7 +794,16 @@ export class Starfield {
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = 'rgba(232, 238, 250, 0.92)';
-    ctx.fillText(label, x + ringR * 0.75 + 4, y);
+    const labelX = x + ringR * 0.75 + 4;
+    ctx.fillText(label, labelX, y);
+    // Claimed, so no standing name can print over it. This runs inside the star
+    // loop, before `#paintStandingLabels`, which is what makes "the LEAD always
+    // wins" a matter of order rather than of luck.
+    this.#leadLabelBox = labelBox(
+      { align: 'left', x: labelX, y },
+      ctx.measureText(label).width,
+      6,
+    );
     ctx.restore();
   }
 }

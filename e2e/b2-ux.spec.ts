@@ -43,6 +43,19 @@ const FROZEN = new Date('2026-09-01T16:30:00Z');
 
 const LABEL = process.env.B2_SHOT === 'before' ? 'before' : 'after';
 
+/**
+ * B2's GATE IS CLOSED, AND ITS EVIDENCE IS COMMITTED.
+ *
+ * This spec writes over `docs/b2-ux-*.png`, which are the pictures HQ reviewed
+ * and ruled on. Running the whole e2e suite for an unrelated reason therefore
+ * silently rewrote the previous slice's record with the current build's layout —
+ * which happened during Slice B3 and had to be undone from git. A finished
+ * visual gate should not be re-armed by `npx playwright test`.
+ *
+ * So it runs only when asked: `B2_SHOT=after npx playwright test b2-ux`.
+ */
+test.skip(!process.env.B2_SHOT, 'B2 evidence is committed; set B2_SHOT to re-take it');
+
 const shot = (page: Page, name: string, project: string): Promise<Buffer> =>
   page.screenshot({ path: path.join(DOCS, `b2-ux-${LABEL}-${name}-${project}.png`) });
 
