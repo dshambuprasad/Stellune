@@ -1722,3 +1722,256 @@ files were never the problem; the burst was. Loading is now pooled three
 instruments at a time with one delayed retry. *Also corrected in this session: I
 first reported "the audio doesn't load" from a single probe taken seconds after
 the deploy, before the CDN had propagated — all fifteen instruments serve.*
+
+---
+
+**◇ HQ REVIEW GATE — the "did we build the wrong thing" verdict, 2026-09-01.**
+Shambu's live listen returned the harshest verdict yet: "none of the 5 themes
+touched the heart. Monotonous with that one note running throughout. It doesn't
+feel like a journey. UX: not mystic. Feels like noise, no patterns, nothing for
+people to recognise." HQ investigated before accepting the verdict at face
+value, because the last three monotony crises each had a mechanical cause.
+
+**VERIFIED FIRST.** B1.1 *was* executed and pushed (he could not remember):
+commits 15f8772 (B1.1), cb2df89 (failure-list correction), eeacf88 (pooled
+sample loading) are on `dshambuprasad/Stellune`, now public. HQ cloned the repo
+independently, confirmed `audioStyleForLens` is deleted and `session.ts` builds
+`createSampledStreamFromUrl`. HQ then drove the deployed site itself
+(dshambuprasad.github.io/Stellune/): every sample request returns 200, console
+is clean, playback runs. The plumbing defects of the last crisis are gone —
+this verdict landed on the *fixed* build and must be answered on the merits.
+
+**THE DIAGNOSIS — the app leads with its most static face.**
+`DEFAULT_LENS_TONIGHT = 'ground'`: the app opens in Tonight × Ground, the one
+lens *designed* as "a deep drone. Endless background." First contact is the
+drone lens in the mode with no composed arc — endless mode has no opening
+gesture, no bloom (bloomSeconds: null), its intensity follows sky richness on a
+~48-minute period, imperceptible in a 3-minute audition. "One note running
+throughout" and "no journey" describe the default configuration accurately.
+The approved music (a4-aurora-full: Birth Sky × Aurora × the full 11-minute
+arc) is in the product but is three choices away from the first Play.
+Forensics on the b11 live capture: dominant-pitch-class share 61% vs 88% on
+the *approved* b0 aurora clip; wider dynamics; healthy onset density — the
+live path is now musically *richer* than material he approved.
+
+**UX finding (first-ever visual gate on Phase 4):** 4,302 stars render as
+near-uniform dots — no constellation lines, no bright-star names at rest, no
+Milky Way, weak magnitude hierarchy; layout leaves half the viewport empty.
+"Noise, no patterns, nothing to recognise" is visually accurate.
+
+**RULING.** Not a pivot. The composition system passed his ear 22 days ago and
+the live path now exceeds that material. This is a first-impressions defect —
+defaults, arrival, and starfield recognisability — plus the queued mix-law
+calibration debt (trims measured pre-limiter). Slice B2 "First Impressions"
+brief to follow. Controlled re-listen requested from Shambu: Birth Sky ×
+Aurora × Bengaluru × 1993-08-01, through the bloom, before any pivot talk.
+
+---
+
+**◇ SLICE B2 — "FIRST IMPRESSIONS", 2026-09-02.** Four workstreams against the
+review gate's ruling. Tests **403 green** (386 + 2 that `boundaries.test.ts`
+generates for the new mapping file, + 14 new + 1 export), typecheck clean,
+production build clean, e2e perf and smoke green at both viewports. Both HALT
+artefacts committed. **Mix law 14 failures → 6**, and the six are named below —
+three of them are a defect that was already shipping and that this slice made
+visible rather than created.
+
+**1 · DEFAULTS.** `DEFAULT_LENS_TONIGHT = 'aurora'`. One line. Ground keeps its
+honest "Handpan, log drum and bells over a deep drone. Endless background."
+descriptor and stays one tap away; it is a good lens for the thing it is for,
+which is not a first listen. `DEFAULT_LENS_BIRTH` untouched.
+
+**2 · THE ARRIVAL — endless mode had no beginning.** It had a *start*. Measured
+on Shambu's own sky before the change, `arcAt`'s endless intensity went **0.540
+at t=0 to 0.526 at t=150 s** — fourteen thousandths across a first listen,
+because it reads the fraction of the bright sky above the horizon and that moves
+on the sidereal period. The figuration was already weaving at **2.2 s** and the
+lead already speaking at **11.6 s**, at full steady-state density, over a drone
+that had not yet had a chance to be a drone. "One note running throughout" and
+"no journey" were accurate descriptions of that.
+
+`src/engine/mapping/arrival.ts` is a composed opening envelope for the first
+**105 s** (the brief's 90–120 band), blended into the sky-richness envelope:
+ground+chord alone to **18 s**, the figuration in over a 12 s lead-in to **30 s**,
+the lead held until **34 s**, then the composed envelope crossfades into the
+sky's own and at t = 105 s the blend weight is exactly 1. After that `arcAt`
+returns the pre-B2 value with **no residue** — asserted against the function that
+computes it, not against a number that happens to look close. Measured on the
+rendered clip the opening sits at −27 dBFS for 18 seconds and builds **13 dB** to
+the first lead phrase.
+
+**IT CHANGES WHEN LAYERS ENTER, NEVER WHAT THEY PLAY**, and that is a test, not a
+claim: every non-bed event the arrival lets through is asserted to be an event
+the un-arrived engine also plays at that same instant, by key. The sky still
+chooses every pitch; the arrival only decides whether a layer is audible yet.
+
+**PARTITION INVARIANCE, at the boundary that did not exist before.** The new gate
+cuts exactly ON each phase join and ±1 ms and ±1 s either side, and reassembles;
+plus four window sizes across the arrival span, plus a no-duplicate sweep. Every
+gate is a pure function of the event's OWN absolute onset, so invariance holds by
+construction rather than by care — the same rule the rest of the stream obeys. A
+gated-out note is not emitted at all rather than emitted silent, because a voice
+with a zero envelope still costs a polyphony slot and still lands in a stem
+measurement.
+
+Birth Sky is untouched, and proven so: `arrivalPlanFor` returns the null arrival
+for any mode but endless, `arcAt`'s birth branch is asserted stage-by-stage, and
+`docs/a4-score.json`'s **birth section is byte-identical** to the committed one.
+`arrivalSeconds: 0` restores the pre-B2 engine exactly, and that is a test too.
+
+**HALT #1 — `docs/b2-arrival-150s.mp3`.** The first 150 s of Tonight × Aurora over
+Bengaluru. Faders calibrated on t = 200–400 s, i.e. **past the arrival**:
+calibrating on a window that is mostly arrival would measure the deliberately
+quiet opening and trim it straight back up, which is the shape the slice exists
+to put in. `test/b2ScoreExport.test.ts` exports the ten-minute score that makes
+that possible, and asserts the calibration window is clear of the arrival rather
+than assuming it.
+
+*One trap found and reported, not silently absorbed:* an audition render writes
+`public/samples/calibration.json`, so rendering this clip **overwrote the app's
+shipped aurora faders** with numbers measured on a tonight score while the other
+four lenses kept their birth-score numbers. Reverted. The renderer should not
+publish the live mix as a side effect of an audition — flagged, not fixed, since
+it is outside this brief.
+
+**3 · STARFIELD.** *(a)* **Constellation figures** from d3-celestial's Western
+`constellations.lines.json`, **BSD-3-Clause**, pinned by immutable commit URL
+(`d2e20e10`) rather than by branch — a line set is a *drawing*, upstream is free
+to redraw it, and a keepsake generated last year should still show the Orion it
+showed last year. Its **Chinese skyculture files are Stellarium-derived and GPL
+and are deliberately not used**; that is recorded in the data file, in
+`ATTRIBUTION.md` and in the build script, because "we didn't take that one" is
+only worth anything if it is written down. `ATTRIBUTION.md` now carries the full
+BSD-3 notice and the file's SHA-256.
+
+The build resolves **every vertex to a star in our own HYG subset** and stores
+star ids, not coordinates — so a line lands *on* the star the renderer just drew
+instead of near it. Match radius is `MERGE_ARCMIN`, the 1 arcminute this build
+already uses to decide two catalogue rows are one point of light, which is the
+principled number rather than a fitted one. **893 of 893 vertices resolved**,
+worst fit 30.7", median exact; all **89 constellations and 150 polylines**
+survive the subset. The subset rule is enforced anyway — a polyline with an
+unresolvable vertex is dropped whole, because a stick man missing a leg is not a
+fainter stick man, it is a wrong one. Drawn at alpha **0.13**, `source-over` not
+`lighter` (additive strokes would knot at every crossing), fading with horizon
+extinction exactly as the stars do, and a segment with an endpoint below the
+horizon is simply absent.
+
+*(b)* **Standing names**: a proper name and mag < 1.5 — **21 stars**, Sirius down
+to Regulus, about ten ever above one horizon. A handful of quiet words, not a
+layer of text. The LEAD's halo and label are untouched and still take precedence.
+*Defect found in the first capture and fixed:* on a 390 px phone "Arcturus"
+became "A", so a label that would overflow now flips to its star's left.
+
+*(c)* **Magnitude hierarchy**: radius `p^2.1 → p^3.0` over a wider range
+(0.26–4.6 px, was 0.34–3.4), alpha `0.30 + 0.70·p^0.75 → 0.16 + 0.84·p^1.7`.
+Sirius is now ~15× the radius of a magnitude-5 star and ~200× its area; it was
+~8× and ~60×. The faint floor drops from 32% to 17% alpha, which is what stops
+thousands of dim points integrating, under `lighter`, into the wash the review
+gate called noise. Both curves stay strictly monotonic in magnitude. `SIZE_BINS`
+14 → 18 because a cubic spends its range on the bright end, and the halo now
+reaches further *proportionally* on bright stars while their core stop moves in —
+a first-magnitude star is a small hard point in a large soft halo, and drawing
+every star at one core-to-halo ratio was much of why the field read as dots of
+assorted sizes rather than as stars. `radiusForBin`'s exponent is now *derived*
+from the other two rather than being a third number to keep in sync.
+
+**HALT #2 — `docs/b2-ux-{before,after}-{rest,playing,zoomed}-{desktop,iphone}.png`.**
+Twelve shots. Same place, same instant (the page clock is frozen, so the two runs
+are not a degree of rotation apart), same camera; the only difference is the
+rendering. "Before" is the true pre-B2 first impression — Tonight × **Ground**,
+and a dome of near-uniform dots in which Vega and Altair cannot be picked out.
+
+**Honest note for the visual gate:** the after sky is *sparser*. That is the
+intended mechanism — but the faint wash that carried the Milky Way's band is much
+less apparent, and whether the alpha floor went a step too far is a judgement for
+the ear-and-eye that owns it, not for me. **No performance cost**: 8.83 → 8.62
+ms/frame desktop, 1.82 → 1.91 iphone, i.e. inside noise. *(The module header's
+"~3 ms" is stale on this machine — it measures ~8.7 ms both before and after.)*
+The gate's separate finding that "layout leaves half the viewport empty" is NOT
+addressed here; it was not in this brief.
+
+**4 · MIX CALIBRATION DEBT — 14 → 6, and what the last six really are.**
+
+`trimsForTargets` measured the RAW stem while the print path plays it through the
+fader, the glue and the ratified per-stem limiter. Limiting removes peaks, which
+lowers RMS. One more iteration, on a copy, through the *actual* chain. The
+`calibrationMeasured` column now reports what `check-mix-law` measures rather
+than a number the printed mix never reached, and the trims cache is keyed by the
+calibration **algorithm** as well as its inputs — a stale fader set is exactly
+the bug that survives a re-run and gets reported as "it still fails". (It did:
+the first isolation run served cached trims and gave identical numbers for two
+different algorithms.)
+
+```
+                     BEFORE            AFTER          target
+figuration  aurora   -19.70            -19.19          -19 ±1
+            embrace  -19.77            -19.20
+            sonata   -19.80            -19.21
+            pulse    -19.77            -19.26
+            ground   -20.08            -19.38
+lead        aurora   -21.12            -21.01          -21 ±1
+            embrace  -22.62            -21.33
+            sonata   -21.36            -21.09
+            pulse    -22.19            -21.28
+            ground   -21.82            -21.15
+fig over ground      2.92 – 3.30       3.62 – 3.81     +4 ±1
+fig over chord       4.92 – 5.30       5.62 – 5.81     +6 ±1
+ground/chord/weather EXACTLY on target, trims unchanged to 2 dp — they have
+                     no limiter, which is the amendment working as designed.
+```
+
+It is a **fixed point and one pass does not close it exactly**: raising a trim by
+X dB pushes more into the limiter, so the level returns by slightly less than X.
+The residual is 0.19–0.38 dB, well inside ±1, and `REFINEMENT_PASSES` stays at
+the ratified single extra iteration rather than running to convergence — a
+calibration that chases its own tail is a compressor with extra steps, and the
+point of the mix law is that the faders are static.
+
+**RATIFIED, LOGGED:** the limiter-engagement bound for transient-carrying stems
+goes **1% → 10%**. The 1% predates any measurement of struck figuration — it is
+the original 0% scaled down by intuition. The **bed stays at ZERO, structurally**:
+ground and chord have no limiter at all, which is the operative half of the law
+and is unchanged. `maxReductionDb` 3.0 unchanged. Pinned in
+`test/schedule.test.ts` so a future relaxation must be a deliberate edit to a
+test that says why.
+
+**`limitStereo` DELETED** from `render-score.mjs`. The live graph is
+`master (LUFS trim) → destination` with no limiter; the renderer had one and on
+pulse it was catching 3.3 dB. The checker's master-limiter assertion is now
+*structural* — engaged must be exactly 0, because there is nothing to engage —
+rather than a bound that could not fail.
+
+**THE SIX THAT REMAIN, and I am not going to call them one cause:**
+
+*Three × master peak* (embrace **+2.6**, pulse **+3.0**, ground **−0.29** dBFS,
+ceiling −0.3). **This is a defect that was already shipping.** Deleting the
+offline limiter did not create it, it revealed it: the peak was measured *after*
+`limitStereo`, so the check read the limiter's own ceiling and was structurally
+incapable of failing — before this slice, three lenses sat at exactly −1.00, the
+ceiling, which is the tell. Isolation run, pre-B2 trims with the limiter gone:
+**embrace +1.6, pulse +2.3**. So the live graph has been clipping by 1.6–2.3 dB,
+and B2's honest trims add about another decibel. Fixing it means a peak-aware
+master fader in BOTH paths, which pulls loudness off the ratified −18 LUFS —
+a ratification question, not a tool's call. **Flagged, not fixed.**
+
+*Two × chord worst window* (embrace −7.8 dB, sonata −7.7 dB at t = 210 s, bound
+±5.5). **Unchanged by this slice, and B1.1's diagnosis of them was wrong.** The
+chord is a bed stem with no limiter; its trim did not move by so much as 0.01 dB,
+and it could not have. "They share one cause" was true of twelve of the fourteen,
+not of these two. This is the composed arc plus the per-lens chord carve, and it
+wants either a wider bound or a shallower carve — Shambu's call, as the last
+widening was.
+
+*One × figuration engagement* (ground lens, **10.535%** against the 10% just
+ratified). The honest trims raised figuration ~1.1 dB, which bought more
+engagement: the six that were failing went from 1.16–8.65% before to
+1.54–10.5% after. The ratified
+10% was derived from the *pre-fix* measurements — the same class of error the
+1% was. Half a point over on the most percussive lens. **I have not moved a
+number HQ has just set.**
+
+**NEXT:** Shambu's ear on `docs/b2-arrival-150s.mp3` and HQ's eye on the twelve
+UX shots. Three rulings wanted: the master peak (a real, shipping clip), the
+chord window bound, and whether 10% survives contact with post-fix figuration.
+HALT.

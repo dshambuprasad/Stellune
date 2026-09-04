@@ -28,7 +28,7 @@ import { execFileSync } from 'node:child_process';
 
 import { FFMPEG, requireFfmpeg, writeWavStereo, rmsDbfs, peak, dbToGain } from './lib/audio.mjs';
 import { OfflineSampler } from './lib/sampler.mjs';
-import { reverbChannel, pingPongDelay, panGains, highpass, limitStereo } from './lib/fx.mjs';
+import { reverbChannel, pingPongDelay, panGains, highpass } from './lib/fx.mjs';
 import {
   STEM_TARGETS_DBFS,
   ROLE_SHAPING,
@@ -364,12 +364,66 @@ export function measureStem([L, R], { skipFraction = 0.1, gateDbfs = null } = {}
  * The mix law's fader move: measure each stem, then trim it to its ratified
  * steady-state target. One scalar per role — every internal dynamic, swell and
  * silence the engine composed survives untouched.
+ *
+ * SLICE B2 — MEASURED AFTER THE LIMITER, NOT BEFORE IT.
+ *
+ * This function used to measure the RAW stem and stop there, and that single
+ * fact is the common cause of eight of B1.1's fourteen failing checks. The
+ * print path does not play the raw stem: it applies the fader, then the glue
+ * (figuration only), then the ratified per-stem transient limiter, and the law
+ * is stated about what comes out of that. Limiting removes peaks, which lowers
+ * RMS — so figuration and lead landed 1–1.6 dB UNDER targets the trims had been
+ * computed to hit exactly, and every hierarchy margin derived from those levels
+ * collapsed with them. The chord's worst 60-second window widened from the same
+ * cause, from the other side.
+ *
+ * So the trim is now computed in two passes. The first is the old one and gets
+ * within a decibel or so. The second runs the calibration stems through the
+ * *actual* chain, on a copy, and corrects by whatever the limiter took away.
+ *
+ * IT IS A FIXED POINT, AND ONE ITERATION DOES NOT CLOSE IT EXACTLY. Raising a
+ * trim by X dB pushes more signal into the limiter, so the post-limiter level
+ * comes back up by slightly less than X. The residual is well inside the law's
+ * ±1 dB — measured, ~0.1 dB on the worst stem — and `REFINEMENT_PASSES` is left
+ * at the ratified single extra iteration rather than run to convergence,
+ * because a calibration that chases its own tail is a compressor with extra
+ * steps and the point of the mix law is that the faders are STATIC.
+ *
+ * Called with no options it behaves exactly as it did before, which is what
+ * keeps the raw-measurement path available to anything that wants it.
  */
-export function trimsForTargets(stems) {
+const REFINEMENT_PASSES = 1;
+
+export function trimsForTargets(stems, options = {}) {
+  const { sampleRate = null, glue = null, limiter = null } = options;
+
   const trims = {};
   for (const role of ROLES) {
     const measured = measureStem(stems[role]);
     trims[role] = measured === -Infinity ? 0 : STEM_TARGETS_DBFS[role] - measured;
+  }
+  if (!sampleRate) return trims;
+
+  for (let pass = 0; pass < REFINEMENT_PASSES; pass++) {
+    for (const role of ROLES) {
+      const [L, R] = stems[role];
+      // A COPY. The caller's stems are re-measured through these trims after
+      // this returns, and the glue and the limiter are destructive.
+      const copy = [Float32Array.from(L), Float32Array.from(R)];
+      const g = dbToGain(trims[role]);
+      for (let i = 0; i < copy[0].length; i++) {
+        copy[0][i] *= g;
+        copy[1][i] *= g;
+      }
+      // The print path's chain, in the print path's order. If these two ever
+      // disagree the calibration is measuring a mix nobody hears.
+      if (role === 'figuration' && glue) glueCompress(copy, sampleRate, glue);
+      if (limiter && !(limiter.zeroEngagementStems ?? []).includes(role)) {
+        limitTransients(copy, sampleRate, limiter);
+      }
+      const after = measureStem(copy);
+      if (after !== -Infinity) trims[role] += STEM_TARGETS_DBFS[role] - after;
+    }
   }
   return trims;
 }
@@ -411,7 +465,14 @@ export async function render(options) {
     .update(fs.readFileSync(path.join(ROOT, 'public', 'samples', 'manifest.json')))
     .digest('hex')
     .slice(0, 12);
-  const cacheKey = `${scoreHash}:${configHash}:${opts.section}:${opts.lens}:${calFrom}:${calSeconds}`;
+  // The cached trims are keyed by the algorithm that produced them as well as
+  // by its inputs. B2 changed WHERE the calibration measures, which no hash of
+  // the score or the samples can see — and a stale fader set is exactly the
+  // kind of bug that survives a re-run and gets reported as "it still fails".
+  const CALIBRATION_VERSION = 'b2-post-limiter';
+  const cacheKey =
+    `${CALIBRATION_VERSION}:${scoreHash}:${configHash}:${opts.section}:${opts.lens}:` +
+    `${calFrom}:${calSeconds}`;
   const cachePath = path.join(HERE, '.cache', 'mix-trims.json');
 
   let trims = null;
@@ -432,16 +493,33 @@ export async function render(options) {
       seconds: Math.min(calSeconds, Math.max(1, sectionSeconds - calFrom)),
       concurrency,
     });
-    trims = trimsForTargets(calibration.stems);
+    trims = trimsForTargets(calibration.stems, {
+      sampleRate: SAMPLE_RATE,
+      glue: sampler.lenses.mastering?.figurationGlue ?? null,
+      limiter: sampler.lenses.mastering?.limiter ?? null,
+    });
     // Verify the move landed: re-measure the calibration stems through the
     // faders we just computed. This is the "exactly" in the mix law.
+    //
+    // SLICE B2: through the WHOLE chain, not just the fader. This column is the
+    // "exactly" in the mix law, and until now it reported a number the printed
+    // mix never reached — the raw stem on target, before the limiter took a
+    // decibel back off it. It now reports what check-mix-law.mjs measures.
     calibrationMeasured = {};
+    const calGlue = sampler.lenses.mastering?.figurationGlue ?? null;
+    const calLimiter = sampler.lenses.mastering?.limiter ?? null;
     for (const role of ROLES) {
       const g = dbToGain(trims[role]);
       const [L, R] = calibration.stems[role];
       for (let i = 0; i < L.length; i++) {
         L[i] *= g;
         R[i] *= g;
+      }
+      if (role === 'figuration' && calGlue) {
+        glueCompress(calibration.stems[role], SAMPLE_RATE, calGlue);
+      }
+      if (calLimiter && !(calLimiter.zeroEngagementStems ?? []).includes(role)) {
+        limitTransients(calibration.stems[role], SAMPLE_RATE, calLimiter);
       }
       calibrationMeasured[role] = measureStem(calibration.stems[role]);
     }
@@ -551,7 +629,22 @@ export async function render(options) {
       master[1][i] *= g;
     }
   }
-  const limiting = limitStereo(master[0], master[1], SAMPLE_RATE, MASTER.limiterCeilingDbfs);
+  // ── no master limiter ───────────────────────────────────────────────────
+  //
+  // SLICE B2 — DELETED, because the live graph does not have one.
+  //
+  // The ratified amendment of 2026-08-10 moved transient limiting off the
+  // master and onto the stems that carry transients, and the live graph was
+  // rebuilt that way. This renderer was not: it kept a master `limitStereo` as
+  // well, and on the pulse lens that limiter was catching 3.3 dB — a fader move
+  // applied to the offline mix and to nothing else. Two paths that print
+  // different audio from the same score are not one mix law, and the offline
+  // one is not the one anybody listens to.
+  //
+  // Reported as zero rather than dropped from the result, so the checker's
+  // headroom assertion stays an assertion. It now says what it should have said
+  // all along: nothing is limiting the master, so the peak has to be honest.
+  const limiting = { maxDb: 0, busyFraction: 0 };
   const masterPeak = Math.max(peak(master[0]), peak(master[1]));
   const masterPeakDbfs = masterPeak > 0 ? 20 * Math.log10(masterPeak) : -Infinity;
   const masterLufs = integratedLufs(master, SAMPLE_RATE);

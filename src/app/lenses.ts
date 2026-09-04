@@ -59,9 +59,20 @@ export const LENSES: readonly Lens[] = [
   },
 ] as const;
 
-/** Defaults per MUSICAL_VISION §5, held until Shambu says otherwise. */
+/**
+ * Defaults per MUSICAL_VISION §5, amended by the HQ review gate of 2026-09-01.
+ *
+ * Tonight opened on `ground` until Slice B2. Ground is the one lens *designed*
+ * as "a deep drone. Endless background." — so the app's first contact was its
+ * most static face, in the mode that had no composed arrival, and the verdict
+ * that came back ("one note running throughout", "doesn't feel like a journey")
+ * was an accurate description of that configuration rather than of the music.
+ * Tonight now opens on `aurora`, which is what Shambu approved by ear. Ground
+ * stays one tap away, still honestly described as an endless background — it is
+ * a good lens for the thing it is for, which is not a first listen.
+ */
 export const DEFAULT_LENS_BIRTH: LensId = 'aurora';
-export const DEFAULT_LENS_TONIGHT: LensId = 'ground';
+export const DEFAULT_LENS_TONIGHT: LensId = 'aurora';
 
 export function lensById(id: string): Lens | null {
   return LENSES.find((lens) => lens.id === id) ?? null;

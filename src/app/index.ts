@@ -53,7 +53,8 @@ import {
   observerForNow,
   type SessionMode,
 } from './session.ts';
-import { EMPTY_GLOW, Starfield } from './starfield.ts';
+import { EMPTY_GLOW, STAR_TUNING, Starfield } from './starfield.ts';
+import { loadConstellationFigures } from './constellations.ts';
 import { toRenderStars } from './starStyle.ts';
 
 /**
@@ -537,7 +538,10 @@ export function mountApp(container: HTMLElement): void {
       return;
     }
 
-    starfield.setStars(toRenderStars(catalog, { maxRadius: 3.4, minRadius: 0.34 }));
+    starfield.setStars(toRenderStars(catalog, STAR_TUNING));
+    // The figures are a drawing over the sky, not the sky: loaded after it, and
+    // never allowed to fail the boot. See `constellations.ts`.
+    void loadConstellationFigures().then((figures) => starfield.setFigures(figures));
     dateInput.value = state.birthDateISO;
 
     // Show a sky immediately, before anyone has pressed anything: a plausible

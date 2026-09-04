@@ -91,6 +91,15 @@ export {
   canonicalMidiForMaxAltitude,
 } from './session.ts';
 
+export type { ArrivalPlan } from './arrival.ts';
+export {
+  NO_ARRIVAL,
+  arrivalPlanFor,
+  arrivalIntensity,
+  figurationGateAt,
+  leadMaySpeakAt,
+} from './arrival.ts';
+
 export type { Motif } from './motif.ts';
 export {
   angularSeparation,

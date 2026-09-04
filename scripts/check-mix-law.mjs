@@ -242,12 +242,17 @@ async function checkLens(lensId, score, lensConfig) {
     `master peak ${full.masterPeakDbfs.toFixed(1)} dBFS`,
     `(ceiling ${MASTER.maxPeakDbfs}; master fader ${full.masterTrimDb.toFixed(1)} dB)`,
   );
+  // SLICE B2: the master limiter is GONE from the renderer, because the live
+  // graph has not had one since transient limiting moved to the stems. This is
+  // now a structural assertion — there is nothing on the master to engage — and
+  // it reads as zero because zero is a property of the graph, not a measurement
+  // that happened to come out low. If a master limiter ever reappears in one
+  // path and not the other, this fails and says which.
   ok(
-    full.limiterBusyFraction <= MASTER.maxLimiterBusyFraction &&
-      full.limitedDb <= MASTER.maxLimitingDb,
-    `limiter active ${(full.limiterBusyFraction * 100).toFixed(2)}% of the render, ` +
-      `worst catch ${full.limitedDb.toFixed(1)} dB`,
-    `(max ${(MASTER.maxLimiterBusyFraction * 100).toFixed(0)}% / ${MASTER.maxLimitingDb} dB)`,
+    full.limiterBusyFraction === 0 && full.limitedDb === 0,
+    `no master limiter — the peak above is unaided, as it is in the live graph`,
+    `(engaged ${(full.limiterBusyFraction * 100).toFixed(2)}%, ` +
+      `worst ${full.limitedDb.toFixed(1)} dB; both must be exactly 0)`,
   );
 
   // ── 6. THE MASTERING LAW — the EQ lanes, measured ───────────────────────

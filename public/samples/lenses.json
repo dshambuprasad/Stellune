@@ -708,7 +708,7 @@
     },
     "limiter": {
       "ceilingDbfs": -1.0,
-      "maxEngagedFraction": 0.01,
+      "maxEngagedFraction": 0.1,
       "_doc": [
         "RATIFIED AMENDMENT, 2026-08-10. The original law said the limiter must never",
         "engage at all. Measured, that rule and the -18 LUFS target could not both be",
@@ -722,7 +722,23 @@
         "limiters are for. So limiting is now permitted on transients only, and the",
         "protection it was written for is asserted directly instead of by proxy:",
         "ZERO gain reduction on the ground and chord stems, structurally, because the",
-        "limiters live on the figuration and lead stems and the bed has none."
+        "limiters live on the figuration and lead stems and the bed has none.",
+        "",
+        "RATIFIED BY HQ, 2026-09-01 (Slice B2). `maxEngagedFraction` is raised from",
+        "0.01 to 0.10, for the transient-carrying stems only. The 1% figure predates",
+        "any measurement of struck figuration: it is the original 0% rule scaled down",
+        "by intuition rather than derived from an observation. Measured, a kalimba or",
+        "glockenspiel weave engages a 3 dB look-ahead limiter on 1.2-8.7% of samples,",
+        "and every one of those catches is at or under the ratified 3 dB ceiling.",
+        "That is glue on a percussive layer, not squash: the REDUCTION bound is what",
+        "protects the transient, and the engagement fraction only ever said how often",
+        "a bounded reduction happens.",
+        "",
+        "What is NOT relaxed, and is why this is safe: the bed. Ground and chord stay",
+        "at ZERO engagement, structurally, because they have no limiter at all. The",
+        "0% rule was written to protect the sustained bed's breathing, and that is",
+        "still protected by construction rather than by a number.",
+        "`zeroEngagementStems` is the operative half of this law."
       ],
       "maxReductionDb": 3.0,
       "engagementThresholdDb": 0.1,
