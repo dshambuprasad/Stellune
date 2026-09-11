@@ -34,6 +34,7 @@ import {
   ROLE_SHAPING,
   WEATHER_OCTAVE_SHIFT,
   MASTER,
+  masterTrimDb as masterTrimFor,
 } from './lib/mixlaw.mjs';
 import { buildSchedule } from './lib/schedule.mjs';
 import {
@@ -59,7 +60,7 @@ const SEND = {
   weather: { reverb: 0.5, delay: 0.1 },
 };
 
-function parseArgs(argv) {
+export function parseArgs(argv) {
   const out = {
     score: 'docs/a3-score.json',
     section: 'birth',
@@ -74,6 +75,22 @@ function parseArgs(argv) {
     noCache: false,
     mp3: false,
     masterTrimDb: null,
+    /**
+     * SLICE B3 — AN AUDITION MUST NOT REPUBLISH THE LIVE MIX.
+     *
+     * `main()` used to write `public/samples/calibration.json` on every run, so
+     * printing a 60-second audition clip silently re-levelled the shipping app
+     * from whatever window and score that clip happened to use. That is a
+     * defect that can ship a wrong mix: the audition set exists to be listened
+     * to and thrown away, and it renders from `docs/a3-score.json` at t=360 s
+     * while the app plays a live tonight sky.
+     *
+     * Publishing is now an explicit act. `npm run calibrate` is the script for
+     * it (measured on the steady state, every lens, which is what the live
+     * graph needs); this flag is the escape hatch for a one-lens re-measure.
+     * Everything else — auditions included — writes nowhere the app reads.
+     */
+    publishCalibration: false,
   };
   for (const arg of argv) {
     const m = /^--([a-zA-Z0-9-]+)(?:=(.*))?$/.exec(arg);
@@ -610,18 +627,34 @@ export async function render(options) {
     -18;
   const loudnessTrimDb = lufsTrimDb(lufsTarget, rawLufs);
   const peakCeilingTrimDb = Number.isFinite(rawPeakDbfs)
-    ? MASTER.limiterCeilingDbfs - rawPeakDbfs
+    ? MASTER.peakCeilingDbfs - rawPeakDbfs
     : 0;
-  // SLICE B1.1 — the master fader is now the LOUDNESS fader, full stop. The
-  // peak guard used to outrank it and that is what left three lenses up to
-  // 8.9 dB under target; with transients limited at the stems, the peaks that
-  // forced the guard no longer arrive here. `peakCeilingTrimDb` is still
-  // measured and reported so a regression shows up as a number rather than as
-  // a surprise.
+  // SLICE B3 — RULING 1, 2026-09-04. THE PEAK CEILING OUTRANKS THE TARGET.
+  //
+  // B1.1 made this the loudness fader "full stop", on the reasoning that stem
+  // limiting had removed the peaks that used to force the guard. It had not.
+  // Measured at B2: embrace printed +2.57 dBFS and pulse +2.96 dBFS — hard
+  // clipping, shipping since B1, in the live graph as much as here, and only
+  // visible once the offline master limiter was deleted and stopped hiding it.
+  //
+  // So the fader is `min(loudness, peak-safe)` again, and −18 LUFS becomes a
+  // TARGET rather than an invariant: when the peak trim binds, the mix lands
+  // under target and `check-mix-law` reports the spread instead of hiding it.
+  // Not a master limiter — the B1.1 amendment put limiting on transient-carrying
+  // stems deliberately, and a master brick-wall is a compressor across the bed
+  // by the side door.
+  //
+  // Computed by `masterTrimFor` rather than in-line, because the live graph
+  // applies the same number and two hand-written copies of one law are how the
+  // paths came to disagree in the first place.
   const masterTrimDb =
     opts.masterTrimDb != null && Number.isFinite(opts.masterTrimDb)
       ? opts.masterTrimDb
-      : loudnessTrimDb;
+      : masterTrimFor({
+          lufsTarget,
+          measuredLufs: rawLufs,
+          measuredPeakDbfs: rawPeakDbfs,
+        });
   if (masterTrimDb !== 0) {
     const g = dbToGain(masterTrimDb);
     for (let i = 0; i < frames; i++) {
@@ -722,9 +755,15 @@ export async function render(options) {
  * measurement, two consumers — the same arrangement `schedule.mjs` makes for
  * the notes. Merged rather than overwritten, so calibrating one lens does not
  * silently un-calibrate the other four.
+ *
+ * THE DESTINATION IS EXPLICIT (Slice B3). `CALIBRATION_FILE` is the one path
+ * the app reads, and a caller has to name it — by passing nothing and meaning
+ * it, from `calibrate-mix.mjs` or from `--publish-calibration`. A render that
+ * has not been asked to publish does not call this at all.
  */
-export function writeCalibration(result) {
-  const file = path.join(ROOT, 'public', 'samples', 'calibration.json');
+export const CALIBRATION_FILE = path.join(ROOT, 'public', 'samples', 'calibration.json');
+
+export function writeCalibration(result, file = CALIBRATION_FILE) {
   const existing = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : { lenses: {} };
   existing.generatedBy = 'scripts/render-score.mjs';
   existing._doc = [
@@ -740,6 +779,14 @@ export function writeCalibration(result) {
     // Unity-master loudness: what the mix arrives at BEFORE the master fader,
     // which is the number the live graph needs to work out its own fader.
     measuredLufs: Number.isFinite(result.rawLufs) ? Number(result.rawLufs.toFixed(2)) : -18,
+    // …and the unity-master PEAK, for the same reason. Slice B3, Ruling 1: the
+    // master fader is `min(loudness trim, peak-safe trim)`, and the live graph
+    // cannot compute the second half of that from a loudness number. Without
+    // this the app has no way to know that embrace peaks 8 dB over full scale
+    // before its fader, which is exactly how it shipped clipping.
+    measuredPeakDbfs: Number.isFinite(result.rawPeakDbfs)
+      ? Number(result.rawPeakDbfs.toFixed(2))
+      : undefined,
     measuredOn: `${path.relative(ROOT, result.score)} · ${result.section}`,
   };
   fs.writeFileSync(file, `${JSON.stringify(existing, null, 2)}\n`);
@@ -815,7 +862,17 @@ async function main() {
         `chord by ${r.motionLeadDb.chord.toFixed(1)} dB there`,
     );
   }
-  console.log(`  calibration written to ${path.relative(ROOT, writeCalibration(r))}`);
+  if (opts.publishCalibration) {
+    console.log(
+      `  calibration PUBLISHED to ${path.relative(ROOT, writeCalibration(r))} — ` +
+        `the live app now plays these faders`,
+    );
+  } else {
+    console.log(
+      '  calibration NOT written (audition render). ' +
+        'Publish deliberately with `npm run calibrate`, or --publish-calibration.',
+    );
+  }
   if (Object.keys(r.substitutions).length) {
     console.log(`  fallback voicings: ${JSON.stringify(r.substitutions)}`);
   }

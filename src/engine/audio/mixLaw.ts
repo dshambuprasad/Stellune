@@ -23,11 +23,25 @@
  * same arrangement that `schedule.mjs` makes for the notes.
  */
 
-import { ROLE_SHAPING, STEM_TARGETS_DBFS, STEM_TOLERANCE_DB } from '../../../scripts/lib/mixlaw.mjs';
+import {
+  masterTrimDb,
+  ROLE_SHAPING,
+  STEM_TARGETS_DBFS,
+  STEM_TOLERANCE_DB,
+} from '../../../scripts/lib/mixlaw.mjs';
 import type { VoiceRole } from '../mapping/index.ts';
 import { samplesBase } from './assetBase.ts';
 
 export { ROLE_SHAPING, STEM_TARGETS_DBFS, STEM_TOLERANCE_DB };
+/**
+ * THE MASTER FADER, imported rather than restated.
+ *
+ * `min(loudness trim, peak-safe trim to −1.0 dBFS)`. Slice B3, Ruling 1: this is
+ * the one place the number is defined, and the live graph and `render-score.mjs`
+ * both call it. The whole reason the app shipped clipping is that the two paths
+ * each had their own idea of what the master fader was.
+ */
+export { masterTrimDb };
 export type { MasteringConfig, EqLane } from './samplerLenses.ts';
 
 /**
@@ -64,6 +78,13 @@ export interface LensCalibration {
   stemTrimDb: Partial<Record<VoiceRole, number>>;
   /** Integrated loudness of the resulting mix at unity master, in LUFS. */
   measuredLufs: number;
+  /**
+   * Peak of the same unity-master mix, in dBFS — the half of the fader a
+   * loudness number cannot tell you. Optional because a calibration written
+   * before Slice B3 does not carry it; a graph reading such a file falls back to
+   * the loudness trim alone and is, correctly, no worse than it was.
+   */
+  measuredPeakDbfs?: number;
   /** Which score this was measured on — so a stale number can be spotted. */
   measuredOn?: string;
 }
@@ -86,6 +107,9 @@ export interface MixCalibration {
  */
 export const FALLBACK_STEM_REFERENCE_DBFS = -20;
 
+/** Peak-over-loudness of the peakiest lens measured at B2. See below. */
+export const FALLBACK_CREST_DB = 21;
+
 export const DEFAULT_CALIBRATION: MixCalibration = {
   generatedBy: 'fallback (no calibration.json — run `npm run render` to measure)',
   lenses: {
@@ -98,6 +122,18 @@ export const DEFAULT_CALIBRATION: MixCalibration = {
         weather: STEM_TARGETS_DBFS.weather - FALLBACK_STEM_REFERENCE_DBFS,
       },
       measuredLufs: -18,
+      /**
+       * The fallback's peak, stated rather than assumed.
+       *
+       * An uncalibrated lens has no measurement, and "no measurement" must not
+       * quietly mean "no peak guard" — that is the failure mode Ruling 1 exists
+       * to close. 21 dB is the WIDEST crest factor measured across the five
+       * lenses at B2 (pulse: +8.7 dBFS peak over −12.3 LUFS at unity master),
+       * so an unknown lens is treated as the peakiest known one. It plays a few
+       * dB quiet and it does not clip, which is the right way round for a number
+       * nobody has measured.
+       */
+      measuredPeakDbfs: -18 + FALLBACK_CREST_DB,
     },
   },
 };

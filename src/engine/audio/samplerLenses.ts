@@ -334,7 +334,11 @@ export const MASTERING_DEFAULTS: MasteringConfig = {
   lufsTargets: { birthSky: -18, tonight: -18, tolerance: 1.0 },
   limiter: {
     ceilingDbfs: -1.0,
-    maxEngagedFraction: 0.01,
+    // The ratified engagement bound: 0.01 -> 0.10 (2026-09-01) -> 0.15
+    // (2026-09-04, Slice B3), transient-carrying stems only. This default had
+    // been left at the original 0.01 while `lenses.json` moved, which is exactly
+    // the drift the comment above says this block exists to prevent.
+    maxEngagedFraction: 0.15,
     maxReductionDb: 3.0,
     engagementThresholdDb: 0.1,
     zeroEngagementStems: ['ground', 'chord'],

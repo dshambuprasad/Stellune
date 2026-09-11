@@ -75,10 +75,26 @@ export const WEATHER_MIN_SEPARATION_SEMITONES = 12;
 export const MASTER = {
   /** The 38 Hz highpass from the v2 render — clears sub-rumble under the drone. */
   highpassHz: 38,
-  /** Where the look-ahead limiter catches peaks. */
-  limiterCeilingDbfs: -1.0,
-  /** Fail the check if the printed file peaks above this. */
-  maxPeakDbfs: -0.3,
+  /**
+   * THE MASTER PEAK CEILING. Ratified by HQ, 2026-09-04 (Slice B3, Ruling 1).
+   *
+   * Not a limiter threshold — there is no master limiter in either path. This is
+   * where the MASTER FADER lands the loudest sample, and it outranks the LUFS
+   * target because a peak ceiling is a fact about the file and a loudness target
+   * is an aim for it. B1.1 inverted that, and what shipped from B1 to B2 was hard
+   * clipping: embrace printed at +2.57 dBFS and pulse at +2.96 dBFS, in the live
+   * graph as well as offline.
+   */
+  peakCeilingDbfs: -1.0,
+  /**
+   * Fail the check if the printed file peaks above this.
+   *
+   * The same number as the ceiling, because the fader is computed to land on it:
+   * this is a STRUCTURAL assertion, not a tolerance. `peakAssertEpsilonDb` exists
+   * only so float error in a gain multiply cannot fail a mix that is correct.
+   */
+  maxPeakDbfs: -1.0,
+  peakAssertEpsilonDb: 0.01,
   /**
    * The limiter may catch transients; it may not sit on the music. Fail if it
    * is holding the master down by more than 1 dB for more than this fraction
@@ -121,3 +137,52 @@ export const WINDOW_SECONDS = 60;
  * tails without excluding any role's actual voice.
  */
 export const WINDOW_GATE_DBFS = -55;
+
+/**
+ * Per-role widening of `WINDOW_TOLERANCE_DB`. Ratified by HQ, 2026-09-04
+ * (Slice B3, Ruling 2).
+ *
+ * CHORD ONLY, and the reason is the chord's alone: it is the layer that carries
+ * the sky filling and thinning across an eleven-minute composed arc, so its
+ * quietest minute and its fullest minute are supposed to be far apart. Measured
+ * on the B2 tonight score the chord's worst window sits 7.8 dB from its own
+ * gated average — the arc breathing, not a mix defect. B1.1 diagnosed this and
+ * the master peak as one cause; that was wrong, and the correction is ratified.
+ *
+ * Every other role stays at ±5.5. A bound widened for one role's musical reason
+ * is a ruling; a bound widened for all of them is a bound switched off.
+ */
+export const WINDOW_TOLERANCE_BY_ROLE = { chord: 8.0 };
+
+/** The window bound that applies to a role. */
+export function windowToleranceFor(role) {
+  return WINDOW_TOLERANCE_BY_ROLE[role] ?? WINDOW_TOLERANCE_DB;
+}
+
+/**
+ * THE MASTER FADER — one derivation, two consumers.
+ *
+ * `min(loudness trim, peak-safe trim)`. The offline renderer and the live graph
+ * must apply the SAME number or the mix law describes neither of them, so the
+ * number is computed here and imported by both: `render-score.mjs` measures
+ * `measuredLufs` and `measuredPeakDbfs` and applies this; the live graph reads
+ * those two measurements out of `calibration.json` and applies this.
+ *
+ * −18 LUFS IS A TARGET, NOT AN INVARIANT (HQ, 2026-09-04). When the peak trim is
+ * the lower of the two the mix lands under its loudness target, and the honest
+ * response is to report the resulting per-lens spread — which `check-mix-law`
+ * does — rather than to buy the target back with a master limiter. The B1.1
+ * amendment put limiting on transient-carrying stems deliberately; a master
+ * brick-wall would put a compressor across the bed by the side door.
+ *
+ * A missing or non-finite peak measurement means "unknown", and unknown must not
+ * silently disable the guard, so it falls back to the loudness trim alone and
+ * the caller is expected to say so.
+ */
+export function masterTrimDb({ lufsTarget, measuredLufs, measuredPeakDbfs }) {
+  const loudness = Number.isFinite(measuredLufs) ? lufsTarget - measuredLufs : 0;
+  const peakSafe = Number.isFinite(measuredPeakDbfs)
+    ? MASTER.peakCeilingDbfs - measuredPeakDbfs
+    : Infinity;
+  return Math.min(loudness, peakSafe);
+}

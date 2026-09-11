@@ -18,7 +18,10 @@
  *                        hold on the other half, which they never saw.
  *   3. HIERARCHY         figuration leads ground and chord — motion in front.
  *   4. UNISON GUARD      weather is never voiced in unison with ground.
- *   5. HEADROOM          the printed master does not clip.
+ *   5. HEADROOM          the printed master peaks at or under −1.0 dBFS. Slice
+ *                        B3, Ruling 1: structural, because the master fader is
+ *                        min(loudness trim, peak-safe trim) and nothing limits
+ *                        the master in either path.
  *
  * Slice B1 adds THE MASTERING LAW, which is the same idea applied to spectrum
  * and to loudness rather than to level:
@@ -26,8 +29,10 @@
  *                        figuration sings, the figuration is in front.
  *   7. GLUE              figuration is compressed by no more than the law allows,
  *                        and nothing else is compressed at all.
- *   8. LOUDNESS          the master lands on its LUFS target, not merely under a
- *                        peak ceiling.
+ *   8. LOUDNESS          the master never exceeds its LUFS target, and lands on
+ *                        it unless the peak ceiling bound it first. Since Ruling
+ *                        1 the target is a TARGET: the per-lens spread is
+ *                        published rather than hidden.
  *   9. LIMITER           engagement is zero. A limiter doing work is a mix that
  *                        is broken somewhere upstream.
  *
@@ -47,6 +52,8 @@ import {
   STEM_TARGETS_DBFS,
   STEM_TOLERANCE_DB,
   WINDOW_TOLERANCE_DB,
+  WINDOW_TOLERANCE_BY_ROLE,
+  windowToleranceFor,
   WINDOW_SECONDS,
   WINDOW_GATE_DBFS,
   FIGURATION_OVER_LAYER_DB,
@@ -187,11 +194,19 @@ async function checkLens(lensId, score, lensConfig) {
         worstAt = w.at;
       }
     }
-    drift[role] = { worstDb: worst, atSeconds: worstAt, gatedReferenceDbfs: gatedReference[role] };
+    // Slice B3, Ruling 2: the bound is per role, and only the chord's is wider.
+    const bound = windowToleranceFor(role);
+    drift[role] = {
+      worstDb: worst,
+      atSeconds: worstAt,
+      gatedReferenceDbfs: gatedReference[role],
+      boundDb: bound,
+    };
     ok(
-      Math.abs(worst) <= WINDOW_TOLERANCE_DB,
+      Math.abs(worst) <= bound,
       `${role.padEnd(11)} worst window ${worst >= 0 ? '+' : ''}${worst.toFixed(1)} dB at t=${worstAt}s`,
-      `(gated avg ${gatedReference[role].toFixed(1)} dBFS, ±${WINDOW_TOLERANCE_DB})`,
+      `(gated avg ${gatedReference[role].toFixed(1)} dBFS, ±${bound}` +
+        (bound === WINDOW_TOLERANCE_DB ? ')' : ' — the chord carries the arc)'),
     );
   }
 
@@ -236,11 +251,20 @@ async function checkLens(lensId, score, lensConfig) {
   );
 
   // ── 5. headroom ─────────────────────────────────────────────────────────
+  //
+  // SLICE B3, RULING 1 — STRUCTURAL, not a tolerance. The master fader is
+  // `min(loudness trim, peak-safe trim to −1.0 dBFS)`, so a correct render lands
+  // AT the ceiling or below it, never above, and there is no limiter anywhere to
+  // rescue it. This is the check that was passing at −0.3 while embrace printed
+  // +2.6 and pulse +2.96: the old bound was a tolerance around a peak the fader
+  // was no longer aiming at. The epsilon is float error in one gain multiply and
+  // nothing else.
   console.log('  headroom:');
   ok(
-    full.masterPeakDbfs <= MASTER.maxPeakDbfs,
-    `master peak ${full.masterPeakDbfs.toFixed(1)} dBFS`,
-    `(ceiling ${MASTER.maxPeakDbfs}; master fader ${full.masterTrimDb.toFixed(1)} dB)`,
+    full.masterPeakDbfs <= MASTER.maxPeakDbfs + MASTER.peakAssertEpsilonDb,
+    `master peak ${full.masterPeakDbfs.toFixed(2)} dBFS`,
+    `(ceiling ${MASTER.maxPeakDbfs}; master fader ${full.masterTrimDb.toFixed(1)} dB = ` +
+      `min(loudness ${full.loudnessTrimDb.toFixed(1)}, peak-safe ${full.peakCeilingTrimDb.toFixed(1)}))`,
   );
   // SLICE B2: the master limiter is GONE from the renderer, because the live
   // graph has not had one since transient limiting moved to the stems. This is
@@ -332,11 +356,12 @@ async function checkLens(lensId, score, lensConfig) {
   );
   if (peakBound && Math.abs(off) > lufsLaw.tolerance) {
     notes.push(
-      `${lensId}: ${(-off).toFixed(1)} dB UNDER the LUFS target, and it is the peak guard that ` +
+      `${lensId}: ${(-off).toFixed(1)} dB UNDER the LUFS target, and it is the peak ceiling that ` +
         `bound it — the stem bus peaked at ${full.rawPeakDbfs.toFixed(1)} dBFS against an RMS of ` +
-        `about ${full.measured.figuration.toFixed(0)}. Reaching the target on this lens needs ` +
-        `either limiter headroom (the law says 0%) or peak-aware stem trims (the law is stated ` +
-        `in RMS). Both are ratification questions, not tool decisions.`,
+        `about ${full.measured.figuration.toFixed(0)}. Ruling 1 (2026-09-04) says this is the ` +
+        `right way round: −18 LUFS is a target, the ceiling is not. Buying the target back would ` +
+        `take a master limiter, and the B1.1 amendment put limiting on transient-carrying stems ` +
+        `on purpose.`,
     );
   }
 
@@ -420,6 +445,10 @@ async function checkLens(lensId, score, lensConfig) {
     glueDb: full.glueDb,
     lufs: measuredLufs,
     lufsTarget,
+    loudnessTrimDb: full.loudnessTrimDb,
+    peakCeilingTrimDb: full.peakCeilingTrimDb,
+    /** True when the −1.0 dBFS ceiling, not the LUFS target, set the fader. */
+    peakBound,
     fingerprint,
   };
 }
@@ -456,6 +485,34 @@ async function main() {
   const results = [];
   for (const lens of lenses) results.push(await checkLens(lens, score, lensConfig));
 
+  // ── THE LOUDNESS SPREAD (Slice B3, Ruling 1) ─────────────────────────────
+  // −18 LUFS is a TARGET, not an invariant: when a lens's crest factor is wider
+  // than its headroom the peak ceiling binds and that lens lands under target.
+  // The honest response is to publish how far apart the five lenses end up —
+  // an 8 dB spread is what normalising to loudness was introduced to remove, so
+  // it is the number that says whether that is happening again.
+  console.log('\n── the loudness spread ' + '─'.repeat(36));
+  const loudest = Math.max(...results.map((r) => r.lufs));
+  const quietest = Math.min(...results.map((r) => r.lufs));
+  const spread = loudest - quietest;
+  for (const r of results) {
+    console.log(
+      `  ${r.lens.padEnd(10)} ${r.lufs.toFixed(1).padStart(6)} LUFS · ` +
+        `peak ${r.masterPeakDbfs.toFixed(2).padStart(6)} dBFS · ` +
+        `fader ${r.masterTrimDb.toFixed(1).padStart(6)} dB` +
+        (r.peakBound ? '  ← peak-bound' : ''),
+    );
+  }
+  console.log(
+    `  spread ${spread.toFixed(1)} dB (target ${results[0]?.lufsTarget}, ` +
+      `${results.filter((r) => r.peakBound).length} of ${results.length} peak-bound)`,
+  );
+  notes.push(
+    `per-lens loudness spread ${spread.toFixed(1)} dB — ${quietest.toFixed(1)} to ` +
+      `${loudest.toFixed(1)} LUFS. Reported, not enforced: Ruling 1 made −18 a target and the ` +
+      `−1.0 dBFS ceiling the invariant, so a peak-bound lens is allowed to sit under it.`,
+  );
+
   console.log('\n── lens invariance ' + '─'.repeat(40));
   const first = results[0];
   for (const r of results.slice(1)) {
@@ -477,7 +534,17 @@ async function main() {
       targets: STEM_TARGETS_DBFS,
       tolerance: STEM_TOLERANCE_DB,
       windowTolerance: WINDOW_TOLERANCE_DB,
+      windowToleranceByRole: WINDOW_TOLERANCE_BY_ROLE,
       windowSeconds: WINDOW_SECONDS,
+      master: {
+        peakCeilingDbfs: MASTER.peakCeilingDbfs,
+        maxPeakDbfs: MASTER.maxPeakDbfs,
+      },
+      loudnessSpreadDb: Number(
+        (
+          Math.max(...results.map((r) => r.lufs)) - Math.min(...results.map((r) => r.lufs))
+        ).toFixed(2),
+      ),
       unison,
       mastering: lensConfig.mastering,
       lenses: results.map(({ fingerprint, ...rest }) => rest),

@@ -708,7 +708,7 @@
     },
     "limiter": {
       "ceilingDbfs": -1.0,
-      "maxEngagedFraction": 0.1,
+      "maxEngagedFraction": 0.15,
       "_doc": [
         "RATIFIED AMENDMENT, 2026-08-10. The original law said the limiter must never",
         "engage at all. Measured, that rule and the -18 LUFS target could not both be",
@@ -738,7 +738,19 @@
         "at ZERO engagement, structurally, because they have no limiter at all. The",
         "0% rule was written to protect the sustained bed's breathing, and that is",
         "still protected by construction rather than by a number.",
-        "`zeroEngagementStems` is the operative half of this law."
+        "`zeroEngagementStems` is the operative half of this law.",
+        "",
+        "RATIFIED BY HQ, 2026-09-04 (Slice B3). 0.10 -> 0.15, transient-carrying",
+        "stems only. Post-fix figuration on struck material engages the look-ahead",
+        "limiter more often than the pre-fix measurement showed, and on struck",
+        "material the engagement FRACTION tracks note density rather than squash:",
+        "a kalimba weave asks the limiter for a bounded catch on every strike.",
+        "Depth is the audible constraint, and depth is unchanged at 3.0 dB.",
+        "",
+        "HQ NOTES FOR THE RECORD that this number has now moved twice and that both",
+        "earlier values were set before anyone had measured post-fix figuration. It",
+        "should not move a third time without evidence that something is AUDIBLE.",
+        "The bed stays at ZERO, structurally, as it has since 2026-08-10."
       ],
       "maxReductionDb": 3.0,
       "engagementThresholdDb": 0.1,
