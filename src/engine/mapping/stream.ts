@@ -46,6 +46,7 @@ import {
 import { figurationNotesInRange } from './figuration.ts';
 import { horizonAtEvent, phrasesInRange } from './conductor.ts';
 import { degreeToMidi } from './motif.ts';
+import { quantiseToHalfBar } from './pulse.ts';
 import type {
   AmplitudeBreakpoint,
   MusicalEvent,
@@ -188,13 +189,28 @@ function leadEvents(plan: SessionPlan, from: number, to: number): MusicalEvent[]
     const registerDegrees = plan.config.leadOctaveOffset * plan.degreesPerOctave;
 
     for (const note of phrase.notes) {
-      if (note.startSeconds < from || note.startSeconds >= to) continue;
-      if (note.startSeconds >= sessionEnd) continue;
+      // SLICE B4 — THE LEAD SITS ON THE PULSE, and that is all that is asked of
+      // it. Once the figuration is metric, a lead chime landing 0.2 s off the
+      // grid reads as a mistake rather than as freedom, so every phrase note is
+      // snapped to the nearest HALF-BAR — coarse enough that the lead stays
+      // sparse and speech-like, aligned enough that it belongs to the same
+      // music. The grammar above is untouched: same phrases, same degrees, same
+      // subjects, same rests.
+      //
+      // QUANTISED BEFORE FILTERING, deliberately. An event belongs to the window
+      // containing its `startSeconds`, so the window test has to be applied to
+      // the onset the event will actually carry; testing the raw time and then
+      // moving it is how a note gets emitted twice, or lost between two windows.
+      // `phrasesInRange` already looks back a whole phrase period, which is far
+      // more than the half-bar a note can move.
+      const onsetSeconds = quantiseToHalfBar(note.startSeconds);
+      if (onsetSeconds < from || onsetSeconds >= to) continue;
+      if (onsetSeconds >= sessionEnd) continue;
       // SLICE B2 — THE ARRIVAL. The lead enters last, once there is a weave for
       // it to speak over. Filtered on the note's own absolute onset, so a phrase
       // straddling the boundary keeps exactly the notes that fall after it —
       // the same rule, and the same purity, as every other gate in this file.
-      if (!leadMaySpeakAt(plan.arrival, note.startSeconds)) continue;
+      if (!leadMaySpeakAt(plan.arrival, onsetSeconds)) continue;
 
       const midi = degreeToMidi(
         anchorDegree + registerDegrees + note.degree,
@@ -202,12 +218,12 @@ function leadEvents(plan: SessionPlan, from: number, to: number): MusicalEvent[]
         plan.scale,
       );
 
-      const here = horizonAtEvent(plan, voiceStar, note.startSeconds);
+      const here = horizonAtEvent(plan, voiceStar, onsetSeconds);
 
       // A chime must not ring on past the end of the piece — the closing gesture
       // is supposed to leave one star alone, not one star plus a stray bell.
       const duration = Number.isFinite(sessionEnd)
-        ? Math.min(note.durationSeconds, sessionEnd - note.startSeconds)
+        ? Math.min(note.durationSeconds, sessionEnd - onsetSeconds)
         : note.durationSeconds;
 
       const baseGain =
@@ -224,7 +240,7 @@ function leadEvents(plan: SessionPlan, from: number, to: number): MusicalEvent[]
         pan: round(azimuthToPan(here.azimuth), 4),
         timbre: colourToTimbre(voiceStar.bv),
         twinkle: round(altitudeToTwinkle(Math.max(0, here.altitude)), 4),
-        startSeconds: round(note.startSeconds, 3),
+        startSeconds: round(onsetSeconds, 3),
         durationSeconds: round(Math.max(0.1, duration), 3),
         phraseId: phrase.phraseId,
         ...(subject.kind === 'constellation'

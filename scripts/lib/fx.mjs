@@ -7,7 +7,15 @@
  * ping-pong delay and a Schroeder-style reverb (four combs into two allpasses
  * per channel) with a darkened tail. Nothing here is trying to be a plugin —
  * it exists so the audition clips sound like a room rather than a dry stack.
+ *
+ * THE ROOM'S DIMENSIONS AND ITS TAIL ARE RATIFIED NUMBERS, not local defaults.
+ * Slice B4 moved them into `mixlaw.mjs` alongside the sends, because the live
+ * graph builds the same room out of the same numbers and a default written here
+ * would be a second opinion about what the room is.
  */
+
+import { REVERB } from './mixlaw.mjs';
+
 
 /** In-place 2nd-order Butterworth highpass. */
 export function highpass(buf, sampleRate, cutoffHz) {
@@ -68,15 +76,19 @@ function allpass(buf, delayFrames, feedback) {
   }
 }
 
-const COMB_MS = [29.7, 37.1, 41.1, 43.7];
-const ALLPASS_MS = [5.0, 1.7];
+const COMB_MS = REVERB.combDelaysMs;
+const ALLPASS_MS = REVERB.allpassMs;
 
 /** Reverb one channel; returns the wet signal (the caller mixes it in). */
-export function reverbChannel(input, sampleRate, { decay = 0.84, dampHz = 2600, spread = 0 } = {}) {
+export function reverbChannel(
+  input,
+  sampleRate,
+  { decay = REVERB.combFeedback, dampHz = REVERB.dampHz, spread = 0 } = {},
+) {
   const wet = new Float32Array(input.length);
   for (const ms of COMB_MS) {
     const frames = Math.max(1, Math.round(((ms + spread) / 1000) * sampleRate));
-    comb(input, wet, frames, decay, 0.35);
+    comb(input, wet, frames, decay, REVERB.combDamping);
   }
   for (let i = 0; i < wet.length; i++) wet[i] *= 0.25;
   for (const ms of ALLPASS_MS) {

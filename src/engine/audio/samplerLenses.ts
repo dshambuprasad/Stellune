@@ -64,7 +64,15 @@ export interface LensDefinition {
   /** Which reference this lens is an homage to (MUSICAL_VISION §5). */
   homage: string;
   palette: string;
-  roles: Record<VoiceRole, LensVoicing[]>;
+  /**
+   * What this lens is made of, role by role.
+   *
+   * SLICE B4: PARTIAL. A lens declares the roles it is made of and may leave the
+   * rest out entirely — the Ground lens is handpan and chimes with no bed under
+   * them. A role that is absent here is not scheduled at all, so reading this
+   * map is the only way to know what a lens plays.
+   */
+  roles: Partial<Record<VoiceRole, LensVoicing[]>>;
   /** Per-role spectral lanes. Documented per lens in `_curve`. */
   eq?: Partial<Record<VoiceRole, EqLane>>;
 }
@@ -199,6 +207,18 @@ export const LENS_ROLES: readonly VoiceRole[] = [
 ] as const;
 
 /**
+ * The roles this lens actually declares, in the mix law's order.
+ *
+ * SLICE B4. `LENS_ROLES` is the vocabulary; this is one lens's sentence. Every
+ * loop that used to walk `LENS_ROLES` for a given lens should walk this instead,
+ * because a role the lens does not declare has no chain, no stem, no send and no
+ * meter — it is not quiet, it is not there.
+ */
+export function rolesDeclaredBy(lens: LensDefinition): VoiceRole[] {
+  return LENS_ROLES.filter((role) => (lens.roles[role]?.length ?? 0) > 0);
+}
+
+/**
  * Check a lens config against a built sample manifest.
  *
  * Runs at bank construction rather than at first note: a lens naming an
@@ -209,12 +229,24 @@ export const LENS_ROLES: readonly VoiceRole[] = [
 export function validateLensConfig(config: LensConfig, manifest: SampleManifest): string[] {
   const problems: string[] = [];
   for (const [lensId, lens] of Object.entries(config.lenses)) {
+    // SLICE B4 — A LENS MAY LEAVE A ROLE OUT, but it may not be made of nothing.
+    // The old rule was "every lens has every role", which is exactly the
+    // assumption the owner's ruling removed: the bed is no longer assumed. What
+    // is still checked is that whatever a lens DOES declare can actually be
+    // played, which is the failure this validation exists to catch while the
+    // screen is still loading.
+    if (rolesDeclaredBy(lens).length === 0) {
+      problems.push(`lens "${lensId}" declares no roles at all`);
+      continue;
+    }
+    if (!lens.roles.figuration?.length) {
+      // The one role that cannot be omitted. Figuration is the layer that
+      // carries the motion; a lens without it is silence with a title.
+      problems.push(`lens "${lensId}" has no instruments for role "figuration"`);
+    }
     for (const role of LENS_ROLES) {
       const chain = lens.roles[role];
-      if (!chain || chain.length === 0) {
-        problems.push(`lens "${lensId}" has no instruments for role "${role}"`);
-        continue;
-      }
+      if (!chain || chain.length === 0) continue;
       for (const link of chain) {
         const instrument = manifest.instruments[link.instrument];
         if (!instrument) {
@@ -394,11 +426,18 @@ export function validateEqLanes(config: LensConfig): string[] {
 
   for (const [lensId, lens] of Object.entries(config.lenses)) {
     if (!lens.eq) continue;
+    const declared = rolesDeclaredBy(lens);
     const lane = (role: VoiceRole): EqLane => lens.eq?.[role] ?? {};
     const hp = (role: VoiceRole): number => lane(role).highpassHz ?? 0;
 
+    // SLICE B4 — THE LANES ARE ABOUT RELATIONSHIPS BETWEEN ROLES, so they are
+    // checked only between roles this lens has. "The motion must sit above the
+    // bed" is not a rule a bedless lens breaks; it is a rule that has nothing to
+    // say about it. The same conditional reasoning as the mix law's margins.
     for (const motion of ['figuration', 'lead'] as const) {
+      if (!declared.includes(motion)) continue;
       for (const pad of ['ground', 'chord'] as const) {
+        if (!declared.includes(pad)) continue;
         if (hp(motion) <= hp(pad)) {
           problems.push(
             `lens "${lensId}": ${motion} is highpassed at ${hp(motion)} Hz, not above ${pad} at ${hp(pad)} Hz — ` +
@@ -408,6 +447,9 @@ export function validateEqLanes(config: LensConfig): string[] {
       }
     }
 
+    // A lens with no chord has no chord to carve. The carve exists to make room
+    // for motion inside a pad; with the pad gone the room is the whole band.
+    if (!declared.includes('chord')) continue;
     const dip = lane('chord').dip;
     if (!dip) {
       problems.push(`lens "${lensId}": chord has no dip — nothing is carved for figuration to sing through`);

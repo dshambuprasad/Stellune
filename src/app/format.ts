@@ -79,12 +79,28 @@ export function todayISO(tzOffsetMinutes: number, now = new Date()): string {
  * Kept as one string in one place so it can be reviewed as a whole, and so
  * there is never a version of this app where it has quietly been trimmed to fit
  * a layout.
+ *
+ * SLICE B4 — REWRITTEN BECAUSE THE OLD SENTENCE STOPPED BEING TRUE.
+ *
+ * It said "a star sounds when it really rises, culminates or sets". That was an
+ * exact description of the engine until B4 put a metric grid under the
+ * figuration: the sky now chooses WHICH note sounds, its register and its
+ * colour, and the grid chooses WHEN. The lead still speaks at real events, and
+ * is now snapped to the nearest half-bar, which is a nudge and not a licence —
+ * so even there "when it really rises" would be overclaiming by half a bar.
+ *
+ * The panel is the product's spine and it is not deleted, shortened or softened:
+ * it says exactly what the engine does, in the same plain voice, including the
+ * part that is now composed rather than observed. A claim that quietly stops
+ * being true is worse than no claim at all.
  */
 export const HONESTY_TEXT =
   'The structure is true: these are the real stars above this place at this ' +
-  'moment, and a star sounds when it really rises, culminates or sets. The ' +
-  'instruments, the musical scale and the tempo are artistic choices. This is ' +
-  'never a claim about what space literally sounds like.';
+  'moment. The sky chooses the notes — which pitches are in the air, how high ' +
+  'they sit, how bright they sound — from where those stars actually are. The ' +
+  'rhythm is composed: a steady pulse the sky is played over. The instruments, ' +
+  'the musical scale and the tempo are artistic choices. This is never a claim ' +
+  'about what space literally sounds like.';
 
 /** The time-zone caveat, shown wherever a city supplies the clock. */
 export const TIMEZONE_CAVEAT =

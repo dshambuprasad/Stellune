@@ -396,8 +396,16 @@ export function phrasesInRange(plan: SessionPlan, from: number, to: number): Phr
   const p = plan.config.phraseSeconds;
   // Look back one period as well: notes are bounded to their own period, but the
   // extra period costs almost nothing and removes a whole class of boundary bug.
+  //
+  // SLICE B4 — AND ONE PERIOD FORWARD, for the same reason in the other
+  // direction. The lead is now quantised to the half-bar, and a note is snapped
+  // to the NEAREST one, so a note that belongs to the phrase starting at 2208 s
+  // can sound at 2207.27 s. The window containing 2207.27 s has to have scanned
+  // that phrase or the note is emitted by nobody — which is exactly what the
+  // partition-invariance gate caught. A phrase is a pure function of its index,
+  // so scanning one more of them costs a phrase and changes no answer.
   const firstPhrase = Math.max(0, Math.floor(from / p) - 1);
-  const lastPhrase = Math.floor(Math.max(from, to - 1e-9) / p);
+  const lastPhrase = Math.floor(Math.max(from, to - 1e-9) / p) + 1;
 
   const phrases: Phrase[] = [];
   for (let index = firstPhrase; index <= lastPhrase; index++) {

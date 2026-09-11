@@ -27,6 +27,18 @@ export declare const MASTER: {
   maxLimiterBusyFraction: number;
   maxLimitingDb: number;
 };
+export declare const ROLE_SENDS: Record<MixRole, { reverb: number; delay: number }>;
+export declare const REVERB: {
+  combFeedback: number;
+  dampHz: number;
+  combDelaysMs: number[];
+  allpassMs: number[];
+  combDamping: number;
+  spreadMs: number;
+  preDelaySeconds: number;
+};
+/** RT60 in seconds for a comb feedback coefficient — the live reverb's `decay`. */
+export declare function reverbDecaySeconds(feedback?: number): number;
 export declare const WINDOW_TOLERANCE_DB: number;
 export declare const WINDOW_TOLERANCE_BY_ROLE: Partial<Record<MixRole, number>>;
 export declare function windowToleranceFor(role: MixRole | string): number;

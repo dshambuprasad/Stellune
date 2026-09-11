@@ -114,6 +114,41 @@ export function shadingTilt(shading, timbre) {
 }
 
 /**
+ * WHICH ROLES A LENS DECLARES — SLICE B4, 2026-09-11.
+ *
+ * The bed is no longer assumed. A lens may leave a role out entirely, and a role
+ * a lens does not declare is NOT SCHEDULED: not silent, not gained to zero,
+ * absent. The Ground lens is the first — handpan notes with no ground, no chord
+ * and no weather under them — because four ear reports in a row ("a single note
+ * playing in the background", "one huge note", "the background note sounds like
+ * noise", "one note running throughout") were all about the bed, and the owner
+ * named it: the bed goes.
+ *
+ * "Absent" is the operative word and it is why this lives HERE rather than in a
+ * gain. A role scheduled and then silenced still costs a voice, still lands in a
+ * stem measurement, still has a reverb tail, and still shows up in a mix-law
+ * check as a stem sitting at −∞ that somebody has to interpret. A role that was
+ * never scheduled is simply not part of the piece.
+ *
+ * An empty chain counts as undeclared, because a lens that lists a role with no
+ * instruments in it has not declared anything a renderer can play.
+ */
+export function declaredRoles(lenses, lensId) {
+  const lens = lenses.lenses?.[lensId];
+  if (!lens) {
+    throw new Error(
+      `unknown lens "${lensId}" — have ${Object.keys(lenses.lenses ?? {}).join(', ')}`,
+    );
+  }
+  return SCHEDULE_ROLES.filter((role) => (lens.roles?.[role]?.length ?? 0) > 0);
+}
+
+/** True when this lens has instruments for this role. */
+export function lensDeclaresRole(lenses, lensId, role) {
+  return declaredRoles(lenses, lensId).includes(role);
+}
+
+/**
  * Choose the instrument for one note.
  *
  * Walks the lens's chain for the role and takes the first instrument whose
@@ -186,9 +221,16 @@ export function buildSchedule(events, lenses, manifest, lensId, options = {}) {
   const shaping = options.roleShaping ?? DEFAULT_ROLE_SHAPING;
   const shading = options.shading ?? lenses.shading;
 
+  // SLICE B4: the lens's declared roles, computed once. An event in a role this
+  // lens does not declare is dropped here — the one place both the renderer and
+  // the live graph pass through, so "not scheduled" means the same thing in both
+  // and neither has to remember to check.
+  const roles = declaredRoles(lenses, lensId);
+
   const out = [];
   for (const event of events) {
     if (!SCHEDULE_ROLES.includes(event.role)) continue;
+    if (!roles.includes(event.role)) continue;
 
     const midi = voicedMidi(event);
     const voice = chooseVoiceFor(lenses, manifest, lensId, event.role, midi);

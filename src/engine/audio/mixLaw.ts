@@ -25,6 +25,9 @@
 
 import {
   masterTrimDb,
+  REVERB,
+  reverbDecaySeconds,
+  ROLE_SENDS,
   ROLE_SHAPING,
   STEM_TARGETS_DBFS,
   STEM_TOLERANCE_DB,
@@ -47,11 +50,13 @@ export type { MasteringConfig, EqLane } from './samplerLenses.ts';
 /**
  * How much of each role goes into its own share of the space.
  *
- * These are `SEND` in `render-score.mjs`, to the digit. They were first written
- * out here from memory with different numbers, and the live mix came back with
- * chord 6 dB and lead 5 dB under their targets while ground and weather sat
- * exactly on theirs — a per-role error, which is what a per-role constant that
- * disagrees with the renderer's looks like from the outside.
+ * SLICE B4 — IMPORTED, NOT RESTATED. This table used to be written out here
+ * "to the digit" from `render-score.mjs`, and the first time it was written from
+ * memory the live mix came back with chord 6 dB and lead 5 dB under their
+ * targets while ground and weather sat exactly on theirs. A per-role error is
+ * what a per-role constant that disagrees with the renderer's looks like from
+ * the outside. It is now one table in `mixlaw.mjs`, the way B3 made the master
+ * fader one function.
  *
  * "Motion in front, vastness behind": the bed is bathed, the figuration is only
  * touched, so the moving parts stay legible instead of smearing into the pad
@@ -61,13 +66,20 @@ export type { MasteringConfig, EqLane } from './samplerLenses.ts';
  * levels, and the renderer's stems each carry their own reverb — so a live
  * graph with one shared reverb bus is not measuring, or mixing, the same thing.
  */
-export const SEND_LEVELS: Record<VoiceRole, { reverb: number; delay: number }> = {
-  ground: { reverb: 0.22, delay: 0.0 },
-  chord: { reverb: 0.34, delay: 0.05 },
-  figuration: { reverb: 0.16, delay: 0.18 },
-  lead: { reverb: 0.3, delay: 0.22 },
-  weather: { reverb: 0.5, delay: 0.1 },
-};
+export const SEND_LEVELS: Record<VoiceRole, { reverb: number; delay: number }> = ROLE_SENDS;
+
+/**
+ * THE ROOM, in the units a live graph needs.
+ *
+ * `REVERB.combFeedback` is a comb feedback coefficient — the offline Schroeder
+ * network's own knob — and `Tone.Reverb` wants an RT60 in seconds, so the
+ * seconds are DERIVED from the coefficient rather than typed in beside it. Until
+ * B4 they were typed in: the renderer's tail was ~1.5 s and this graph's was
+ * 8 s, from the same ratified word "reverb". `REVERB.dampHz` is the one-pole
+ * darkening the offline tail gets, and it is applied here as a lowpass on the
+ * reverb's own output so both rooms are dark by the same number.
+ */
+export { REVERB, reverbDecaySeconds };
 
 /** The master highpass, shared with the renderer. */
 export { MASTER } from '../../../scripts/lib/mixlaw.mjs';

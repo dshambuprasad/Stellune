@@ -55,7 +55,7 @@ export const LENSES: readonly Lens[] = [
     id: 'ground',
     title: 'Ground',
     homage: 'handpan hours',
-    palette: 'Handpan, log drum and bells over a deep drone. Endless background.',
+    palette: 'Handpan, log drum and hand chimes. Notes, with nothing under them.',
   },
 ] as const;
 
@@ -68,8 +68,13 @@ export const LENSES: readonly Lens[] = [
  * that came back ("one note running throughout", "doesn't feel like a journey")
  * was an accurate description of that configuration rather than of the music.
  * Tonight now opens on `aurora`, which is what Shambu approved by ear. Ground
- * stays one tap away, still honestly described as an endless background — it is
- * a good lens for the thing it is for, which is not a first listen.
+ * stays one tap away.
+ *
+ * SLICE B4: and the deep drone is gone from it. The owner named the bed as the
+ * "tuuuuuuuu background sound" and ruled it out of this lens, so Ground is now
+ * handpan notes with nothing under them and its description says so. Whether it
+ * goes back to being the Tonight default is a question for the ear that judges
+ * this slice, not an assumption this file should make.
  */
 export const DEFAULT_LENS_BIRTH: LensId = 'aurora';
 export const DEFAULT_LENS_TONIGHT: LensId = 'aurora';

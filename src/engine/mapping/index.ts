@@ -151,3 +151,17 @@ export type {
 } from './movement.ts';
 export { PATTERN_VOCABULARY, patternByName, planMovements, formAt } from './movement.ts';
 export { bloomLayersAt } from './figuration.ts';
+
+// Slice B4 — THE PULSE. The sky decides which note; the grid decides when.
+export {
+  PULSE,
+  STEP_SECONDS,
+  BAR_SECONDS,
+  LEAD_QUANTISE_SECONDS,
+  stepIndexAt,
+  stepStartSeconds,
+  accentAt,
+  poolIndexAt,
+  quantiseToHalfBar,
+} from './pulse.ts';
+export { figurationPoolAt } from './figuration.ts';

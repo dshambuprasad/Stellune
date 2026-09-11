@@ -67,6 +67,15 @@ export interface ConcurrencyGrid {
 }
 
 export declare const SCHEDULE_ROLES: readonly string[];
+
+/**
+ * The roles a lens declares, in the mix law's order — Slice B4.
+ *
+ * A lens may leave a role out, and a role it leaves out is not scheduled at all.
+ * Both consumers read this rather than assuming five.
+ */
+export declare function declaredRoles(lenses: unknown, lensId: string): string[];
+export declare function lensDeclaresRole(lenses: unknown, lensId: string, role: string): boolean;
 export declare const DEFAULT_ROLE_SHAPING: Record<string, { velocityCompress: number }>;
 
 export declare function voicedMidi(event: ScheduleEvent): number;

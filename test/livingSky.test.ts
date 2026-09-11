@@ -59,6 +59,10 @@ import {
   patternByName,
   PATTERN_VOCABULARY,
   bloomLayersAt,
+  figurationPoolAt,
+  PULSE,
+  STEP_SECONDS,
+  LEAD_QUANTISE_SECONDS,
   prepareSession,
   renderWindow,
   soundingChordTones,
@@ -382,6 +386,25 @@ describe('THE GATE — every pitch on-scale, across a full hour and every role',
 
 describe('the Conductor', () => {
   const plan = session({ mode: 'endless', kappa: 30 });
+
+  it('SLICE B4 — every lead note sits on a half-bar, and stays sparse', () => {
+    // The lead's only rhythmic constraint. The grammar above it is untouched:
+    // same phrases, same degrees, same subjects, same rests — the note is simply
+    // snapped to the nearest half-bar so it belongs to the same music as the
+    // pulse underneath it.
+    const leads = renderWindow(plan, 0, 3600).events.filter((e) => e.role === 'lead');
+    expect(leads.length).toBeGreaterThan(5);
+
+    for (const note of leads) {
+      const off =
+        note.startSeconds - Math.round(note.startSeconds / LEAD_QUANTISE_SECONDS) * LEAD_QUANTISE_SECONDS;
+      expect(Math.abs(off), `lead at ${note.startSeconds}s is off the half-bar`).toBeLessThan(1e-3);
+    }
+
+    // Sparse: quantising must not turn the lead into a part. Far fewer lead
+    // notes than half-bars in the same stretch.
+    expect(leads.length).toBeLessThan(3600 / LEAD_QUANTISE_SECONDS / 10);
+  });
 
   it('respects the note budget in every sliding minute', () => {
     const budget = noteBudgetPerMinute(plan.weather);
@@ -1284,20 +1307,49 @@ describe('figuration — TRANSITIONS ARE THE CRAFT', () => {
     }
   });
 
-  it('inside a movement the HARMONY still breathes, at most one slot per cycle', () => {
-    // What lives within a movement is the tone assignment, not the rhythm.
+  it('SLICE B4 — the POOL turns over at the speed of the sky, not of the music', () => {
+    // A3 asserted "at most one slot changes its tone per cycle", which it got by
+    // giving each slot its own seeded pick and its own change epoch. The rule
+    // held and the music still had nothing to recognise, because eight
+    // independent draws from a chord are not a figure however slowly they move.
+    //
+    // B4 replaced the mechanism, so the thing to assert moved with it. The
+    // reading head is SUPPOSED to visit different pool members every bar — that
+    // is what walking an order means. What must turn over slowly is the POOL
+    // itself: the material the figure is made of changes at the rate stars rise
+    // and set, which is what lets an ostinato evolve instead of resetting.
+    // Measured INSIDE a movement body, where the only thing moving the pool is
+    // the sky. A seam is allowed to change it wholesale — that is what a
+    // movement's register offset is for, and it is the form speaking, not
+    // turnover — and a pool of two stars in the opening minute is a fact about
+    // the opening rather than a rate.
+    let compared = 0;
     for (const movement of plan.movementPlan.movements) {
       const firstCycle = Math.ceil(movement.fromSeconds / cycleSeconds(plan));
       const lastCycle = Math.floor(movement.toSeconds / cycleSeconds(plan)) - 1;
       for (let n = firstCycle + 1; n <= lastCycle; n++) {
-        const before = patternAt(plan, n - 1);
-        const after = patternAt(plan, n);
-        const moved = before.filter(
-          (slot, i) => slot.toneStarId !== (after[i] as (typeof after)[number]).toneStarId,
-        ).length;
-        expect(moved, `movement ${movement.index}, cycle ${n}`).toBeLessThanOrEqual(1);
+        const wasAt = cycleStartSeconds(plan, n - 1);
+        const nowAt = cycleStartSeconds(plan, n);
+        const was = formAt(plan.movementPlan, wasAt);
+        const now = formAt(plan.movementPlan, nowAt);
+        const insideOneBody =
+          was &&
+          now &&
+          was.transitionProgress === null &&
+          now.transitionProgress === null &&
+          was.movement.index === now.movement.index;
+        if (!insideOneBody) continue;
+
+        const before = new Set(figurationPoolAt(plan, wasAt).map((t) => t.starId));
+        const after = figurationPoolAt(plan, nowAt).map((t) => t.starId);
+        if (before.size === 0 || after.length < 8) continue;
+
+        const carried = after.filter((id) => before.has(id)).length / after.length;
+        expect(carried, `movement ${movement.index}, cycle ${n}`).toBeGreaterThan(0.6);
+        compared++;
       }
     }
+    expect(compared, 'nothing was actually compared').toBeGreaterThan(20);
   });
 
   it('gives consecutive movements CONTRASTING patterns', () => {
@@ -1357,18 +1409,30 @@ describe('figuration — TRANSITIONS ARE THE CRAFT', () => {
     }
   });
 
-  it('migrates a departed tone gradually, never mid-cycle', () => {
-    const movement = plan.movementPlan.movements[1] as (typeof plan.movementPlan.movements)[number];
-    const firstCycle = Math.ceil(movement.fromSeconds / cycleSeconds(plan));
-    const lastCycle = Math.floor(movement.toSeconds / cycleSeconds(plan)) - 1;
-    for (let n = firstCycle + 1; n <= lastCycle; n++) {
-      const before = patternAt(plan, n - 1);
-      const after = patternAt(plan, n);
-      const reassigned = before.filter(
-        (slot, i) => slot.toneStarId !== (after[i] as (typeof after)[number]).toneStarId,
-      );
-      expect(reassigned.length).toBeLessThanOrEqual(1);
+  it('SLICE B4 — THE FIGURE REPEATS: the same bar of the weave comes back', () => {
+    // The point of the whole slice, asserted as a number. Under A3's per-slot
+    // random picks a bar of figuration essentially never recurred; under a
+    // reading head walking a fixed order, bars recur as the head wraps the pool
+    // — which is what "an ostinato" means and what four ear reports asked for.
+    const notes = figurationNotesInRange(plan, 0, 900).filter((n) => n.layer === 0);
+    expect(notes.length).toBeGreaterThan(200);
+
+    const bars = new Map<number, string[]>();
+    for (const note of notes) {
+      const bar = bars.get(note.cycleIndex) ?? [];
+      bar.push(`${note.slot}:${note.midi}`);
+      bars.set(note.cycleIndex, bar);
     }
+
+    const shapes = new Map<string, number>();
+    for (const bar of bars.values()) {
+      const shape = bar.join(',');
+      shapes.set(shape, (shapes.get(shape) ?? 0) + 1);
+    }
+    const mostRepeated = Math.max(...shapes.values());
+    expect(mostRepeated, 'no bar of the weave ever recurs — there is no figure').toBeGreaterThanOrEqual(3);
+    // And the weave is not ONE bar on a loop either: it evolves as the sky turns.
+    expect(shapes.size).toBeGreaterThan(5);
   });
 
   it('breathes into an arc-stage change rather than stepping', () => {
@@ -1420,20 +1484,20 @@ describe('figuration — determinism and partition invariance', () => {
     }
   });
 
-  it('humanises without ever reordering the weave', () => {
-    const notes = figurationNotesInRange(plan, 0, 600);
-    const bySlot = notes.filter((n) => n.cycleIndex === notes[0]?.cycleIndex);
-    for (let i = 1; i < bySlot.length; i++) {
-      expect((bySlot[i] as (typeof bySlot)[number]).startSeconds).toBeGreaterThan(
-        (bySlot[i - 1] as (typeof bySlot)[number]).startSeconds,
-      );
+  it('SLICE B4 — EVERY ONSET IS ON THE GRID, to the sample', () => {
+    // No humanisation and no swing: he asked for simple. The assertion is that
+    // an onset is exactly `stepIndex × STEP_SECONDS` — within the 0.1 ms the
+    // score's own rounding introduces — so the pulse is a pure function of
+    // absolute piece time and a window boundary cannot move a note off it.
+    const notes = figurationNotesInRange(plan, 0, 600).filter((n) => n.layer === 0);
+    expect(notes.length).toBeGreaterThan(100);
+
+    for (const note of notes) {
+      const drift = note.startSeconds - Math.round(note.startSeconds / STEP_SECONDS) * STEP_SECONDS;
+      expect(Math.abs(drift), `note at ${note.startSeconds}s is off the grid`).toBeLessThan(1e-3);
     }
-    // Drift is real but small.
-    const drifts = notes.map(
-      (n) => n.startSeconds - (cycleStartSeconds(plan, n.cycleIndex) + n.slot * plan.config.figurationSlotSeconds),
-    );
-    expect(Math.max(...drifts.map(Math.abs))).toBeLessThanOrEqual(plan.config.figurationHumanizeSeconds + 1e-9);
-    expect(new Set(drifts.map((d) => d.toFixed(5))).size).toBeGreaterThan(10);
+    expect(plan.config.figurationHumanizeSeconds).toBe(0);
+    expect(STEP_SECONDS).toBeCloseTo(60 / PULSE.bpm / PULSE.stepsPerBeat, 12);
   });
 });
 
@@ -1577,9 +1641,12 @@ describe('motif as ostinato', () => {
   it('spaces the statements by the configured period', () => {
     const movement = plan.movementPlan.movements.find((m) => m.motif !== null);
     expect(movement).toBeDefined();
-    // Onsets are humanised by up to ±18 ms, so a slot-0 note can drift just
-    // below its own cycle boundary; nudge past that before bucketing.
-    const nudge = plan.config.figurationHumanizeSeconds * 2;
+    // Onsets are rounded to four decimals in the score, so a note that sits
+    // exactly on a cycle boundary can land a ten-thousandth of a second under it
+    // and bucket into the previous cycle. Nudge past that before bucketing. (It
+    // used to be the humanisation that did this; B4 set humanisation to zero and
+    // the rounding remained.)
+    const nudge = 1e-3;
     const cycles = [
       ...new Set(
         events

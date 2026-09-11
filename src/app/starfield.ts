@@ -757,8 +757,10 @@ export class Starfield {
   /**
    * The LEAD speaker: the strongest halo in the sky, and a small name.
    *
-   * "A star speaks when it really rises, culminates or sets — and GLOWS as it
-   * sounds" (PRODUCT_WALKTHROUGH). This is that sentence, drawn.
+   * "A star speaks when it rises, culminates or sets — and GLOWS as it sounds"
+   * (PRODUCT_WALKTHROUGH). This is that sentence, drawn. Since B4 the lead's
+   * onset is snapped to the nearest half-bar, so the glow answers the grid by
+   * up to half a bar; the star it names is still the star that really spoke.
    */
   #paintLead(
     ctx: CanvasRenderingContext2D,

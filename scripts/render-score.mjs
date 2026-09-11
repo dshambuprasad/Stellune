@@ -32,11 +32,13 @@ import { reverbChannel, pingPongDelay, panGains, highpass } from './lib/fx.mjs';
 import {
   STEM_TARGETS_DBFS,
   ROLE_SHAPING,
+  ROLE_SENDS,
+  REVERB,
   WEATHER_OCTAVE_SHIFT,
   MASTER,
   masterTrimDb as masterTrimFor,
 } from './lib/mixlaw.mjs';
-import { buildSchedule } from './lib/schedule.mjs';
+import { buildSchedule, declaredRoles } from './lib/schedule.mjs';
 import {
   applyEqLane,
   glueCompress,
@@ -49,16 +51,28 @@ import {
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
 const SAMPLE_RATE = 44100;
+/**
+ * The mix law's role vocabulary — NOT the roles of any particular render.
+ *
+ * SLICE B4: a lens declares which of these it is made of, and a role it does not
+ * declare is absent from the render — no stem, no fader, no measurement, no line
+ * in the table. `rolesFor()` is what every loop in this file walks; `ROLES` is
+ * only the order they come in.
+ */
 const ROLES = ['ground', 'chord', 'figuration', 'lead', 'weather'];
 
-/** How much of each role goes to the shared space. Motion in front, vastness behind. */
-const SEND = {
-  ground: { reverb: 0.22, delay: 0.0 },
-  chord: { reverb: 0.34, delay: 0.05 },
-  figuration: { reverb: 0.16, delay: 0.18 },
-  lead: { reverb: 0.3, delay: 0.22 },
-  weather: { reverb: 0.5, delay: 0.1 },
-};
+/** The roles this lens declares, in the mix law's order. */
+function rolesFor(sampler, lens) {
+  return declaredRoles(sampler.lenses, lens);
+}
+
+/**
+ * How much of each role goes to the shared space. Motion in front, vastness
+ * behind — and since Slice B4 the numbers are IMPORTED, not restated. This file
+ * and `src/engine/audio/mixLaw.ts` each used to carry their own copy of the
+ * table, with a comment on one of them promising it matched the other.
+ */
+const SEND = ROLE_SENDS;
 
 export function parseArgs(argv) {
   const out = {
@@ -146,9 +160,9 @@ function readSection(score, name) {
  * for the mix law's concurrency normalisation. Measured over the whole section
  * so a chord's density does not jump between windows of the same render.
  */
-function concurrencyByRole(events) {
+function concurrencyByRole(events, roles = ROLES) {
   const out = {};
-  for (const role of ROLES) {
+  for (const role of roles) {
     const inRole = events.filter((e) => e.role === role);
     let max = 1;
     const edges = new Set();
@@ -189,10 +203,13 @@ export function steadyStateWindow(sectionSeconds) {
 async function renderStems({ sampler, events, lens, fromSeconds, seconds, concurrency }) {
   const sr = SAMPLE_RATE;
   const frames = Math.round(seconds * sr);
+  // ONLY THE ROLES THIS LENS DECLARES. A bedless lens has no ground stem — not a
+  // silent one — so there is nothing here to measure, trim, print or explain.
+  const roles = rolesFor(sampler, lens);
   const stems = {};
   /** Per-frame count of voices sounding in each role — the live divisor. */
   const active = {};
-  for (const role of ROLES) {
+  for (const role of roles) {
     stems[role] = [new Float32Array(frames), new Float32Array(frames)];
     active[role] = new Float32Array(frames);
   }
@@ -287,7 +304,7 @@ async function renderStems({ sampler, events, lens, fromSeconds, seconds, concur
   // the piece the first time. The divisor is slewed over ~2 s so voices entering
   // and leaving glide rather than step.
   const slew = Math.exp(-1 / (2.0 * sr));
-  for (const role of ROLES) {
+  for (const role of roles) {
     if (!ROLE_SHAPING[role].concurrencyNormalise) continue;
     const count = active[role];
     const [L, R] = stems[role];
@@ -313,11 +330,11 @@ async function renderStems({ sampler, events, lens, fromSeconds, seconds, concur
   // paper by a device that was switched off. Glue happens after the fader, in
   // `render()`, which is also where the live graph has it.
   const lensDefinition = sampler.lens(lens);
-  for (const role of ROLES) applyEqLane(stems[role], sr, lensDefinition.eq?.[role]);
+  for (const role of roles) applyEqLane(stems[role], sr, lensDefinition.eq?.[role]);
 
   // Per-role space, then the 38 Hz highpass — applied per stem so that what we
   // measure is exactly what gets summed.
-  for (const role of ROLES) {
+  for (const role of roles) {
     const [L, R] = stems[role];
     const send = SEND[role];
     if (send.delay > 0) {
@@ -328,8 +345,16 @@ async function renderStems({ sampler, events, lens, fromSeconds, seconds, concur
       }
     }
     if (send.reverb > 0) {
-      const wl = reverbChannel(L, sr, { decay: 0.84, dampHz: 2400, spread: 0 });
-      const wr = reverbChannel(R, sr, { decay: 0.84, dampHz: 2400, spread: 0.9 });
+      const wl = reverbChannel(L, sr, {
+        decay: REVERB.combFeedback,
+        dampHz: REVERB.dampHz,
+        spread: 0,
+      });
+      const wr = reverbChannel(R, sr, {
+        decay: REVERB.combFeedback,
+        dampHz: REVERB.dampHz,
+        spread: REVERB.spreadMs,
+      });
       for (let i = 0; i < frames; i++) {
         L[i] += wl[i] * send.reverb;
         R[i] += wr[i] * send.reverb;
@@ -339,7 +364,7 @@ async function renderStems({ sampler, events, lens, fromSeconds, seconds, concur
     highpass(R, sr, MASTER.highpassHz);
   }
 
-  return { stems, frames, voiceCount, substitutions };
+  return { stems, frames, roles, voiceCount, substitutions };
 }
 
 /**
@@ -414,15 +439,20 @@ const REFINEMENT_PASSES = 1;
 export function trimsForTargets(stems, options = {}) {
   const { sampleRate = null, glue = null, limiter = null } = options;
 
+  // The stems it was HANDED, not the vocabulary: a lens that declares four roles
+  // gets four faders, and asking for a fifth would measure an array that does
+  // not exist.
+  const roles = Object.keys(stems);
+
   const trims = {};
-  for (const role of ROLES) {
+  for (const role of roles) {
     const measured = measureStem(stems[role]);
     trims[role] = measured === -Infinity ? 0 : STEM_TARGETS_DBFS[role] - measured;
   }
   if (!sampleRate) return trims;
 
   for (let pass = 0; pass < REFINEMENT_PASSES; pass++) {
-    for (const role of ROLES) {
+    for (const role of roles) {
       const [L, R] = stems[role];
       // A COPY. The caller's stems are re-measured through these trims after
       // this returns, and the glue and the limiter are destructive.
@@ -460,7 +490,11 @@ export async function render(options) {
   sampler.validateLens(opts.lens);
   await sampler.preload(opts.lens);
 
-  const concurrency = concurrencyByRole(events);
+  // WHAT THIS LENS IS MADE OF. Everything below walks this list, so a bedless
+  // lens is rendered, measured, trimmed and reported as the four-, three- or
+  // two-role piece it actually is.
+  const roles = rolesFor(sampler, opts.lens);
+  const concurrency = concurrencyByRole(events, roles);
 
   // ── the faders ───────────────────────────────────────────────────────────
   // Calibrated once per (score, section, lens) over the steady-state window,
@@ -525,7 +559,7 @@ export async function render(options) {
     calibrationMeasured = {};
     const calGlue = sampler.lenses.mastering?.figurationGlue ?? null;
     const calLimiter = sampler.lenses.mastering?.limiter ?? null;
-    for (const role of ROLES) {
+    for (const role of roles) {
       const g = dbToGain(trims[role]);
       const [L, R] = calibration.stems[role];
       for (let i = 0; i < L.length; i++) {
@@ -564,7 +598,7 @@ export async function render(options) {
   const limiterLaw = sampler.lenses.mastering?.limiter;
   const stemLimiting = {};
   let glueDb = 0;
-  for (const role of ROLES) {
+  for (const role of roles) {
     measuredRaw[role] = measureStem(stems[role]);
     const g = dbToGain(trims[role]);
     const [L, R] = stems[role];
@@ -698,10 +732,14 @@ export async function render(options) {
   const motionBandDb = {};
   const motionLeadDb = {};
   if (overlap) {
-    for (const role of ROLES) {
+    for (const role of roles) {
       motionBandDb[role] = bandLevelDb(stems[role], SAMPLE_RATE, overlap.figurationBandHz);
     }
+    // Only against a pad this lens actually has. "Figuration leads the ground by
+    // Infinity dB" is not a measurement, it is a missing stem with a number
+    // printed over it — see the mix law's conditional margins.
     for (const pad of ['ground', 'chord']) {
+      if (!roles.includes(pad)) continue;
       motionLeadDb[pad] = motionBandDb.figuration - motionBandDb[pad];
     }
   }
@@ -711,6 +749,8 @@ export async function render(options) {
     score: scorePath,
     section: opts.section,
     lens: opts.lens,
+    /** The roles this lens declares — the only ones anything below is about. */
+    roles,
     from: opts.from,
     seconds: opts.seconds,
     sectionSeconds,
@@ -805,7 +845,7 @@ async function main() {
   writeWavStereo(outPath, r.master[0], r.master[1], SAMPLE_RATE);
 
   if (opts.stems) {
-    for (const role of ROLES) {
+    for (const role of r.roles) {
       const p = outPath.replace(/\.wav$/, `.${role}.wav`);
       writeWavStereo(p, r.stems[role][0], r.stems[role][1], SAMPLE_RATE);
     }
@@ -836,7 +876,9 @@ async function main() {
       `${r.calibratedFrom + r.calibrateSeconds}s of ${r.sectionSeconds}s`,
   );
   console.log('\n  role         target    trim   steady-state   this clip   voices');
-  for (const role of ROLES) {
+  // The lens's own roles. A role it does not declare has no row, because it has
+  // no stem — printing "ground —" would be reporting on something absent.
+  for (const role of r.roles) {
     const steady = r.calibrationMeasured?.[role];
     console.log(
       `  ${role.padEnd(11)}${String(STEM_TARGETS_DBFS[role]).padStart(6)}   ` +
@@ -855,12 +897,15 @@ async function main() {
       `limiter active ${(r.limiterBusyFraction * 100).toFixed(2)}% (worst ${r.limitedDb.toFixed(1)} dB)`,
   );
   if (Object.keys(r.motionBandDb).length) {
-    const levels = ROLES.map((role) => `${role} ${r.motionBandDb[role].toFixed(1)}`).join(' · ');
+    const levels = r.roles.map((role) => `${role} ${r.motionBandDb[role].toFixed(1)}`).join(' · ');
     console.log(`  in the motion band (dBFS): ${levels}`);
-    console.log(
-      `  figuration leads ground by ${r.motionLeadDb.ground.toFixed(1)} dB, ` +
-        `chord by ${r.motionLeadDb.chord.toFixed(1)} dB there`,
-    );
+    for (const pad of ['ground', 'chord']) {
+      console.log(
+        r.roles.includes(pad)
+          ? `  figuration leads ${pad} by ${r.motionLeadDb[pad].toFixed(1)} dB there`
+          : `  figuration over ${pad}: not applicable — this lens declares no ${pad}`,
+      );
+    }
   }
   if (opts.publishCalibration) {
     console.log(

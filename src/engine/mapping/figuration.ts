@@ -60,6 +60,7 @@ import { arcAt, type SessionPlan } from './session.ts';
 import { figurationGateAt } from './arrival.ts';
 import { soundingChordTonesCached, type SoundingTone } from './chordVoices.ts';
 import { formAt, patternByName, type FormPosition, type Movement } from './movement.ts';
+import { accentAt, poolIndexAt } from './pulse.ts';
 import type { ArcStage } from './types.ts';
 
 const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
@@ -141,11 +142,6 @@ export function cycleStartSeconds(plan: SessionPlan, cycleIndex: number): number
   return cycleIndex * cycleSeconds(plan);
 }
 
-/** Which slot is permitted to change at each cycle-residue. */
-function changeOrder(plan: SessionPlan): number[] {
-  return permutation(plan.config.figurationSlots, plan.config.seed ?? 1, 11);
-}
-
 /** Priority order in which slots switch on as density rises. */
 function activationOrder(plan: SessionPlan): number[] {
   return permutation(plan.config.figurationSlots, plan.config.seed ?? 1, 29);
@@ -176,23 +172,18 @@ export function activeCountAt(plan: SessionPlan, cycleIndex: number): number {
 }
 
 /**
- * The cycle at which slot `s` last changed — the heart of the design.
+ * SLICE B4 — `lastChangeCycle` IS GONE, and with it A3's change-epoch scheme.
  *
- * Slot `s` may change only on cycles whose residue equals its position in
- * `changeOrder`. Since that mapping is a bijection, **exactly one slot changes
- * per cycle**, and this returns the most recent such cycle at or before `n`.
- *
- * Everything about a slot — its tone AND whether it sounds at all — is read at
- * this cycle. That is why the ≤1-slot rule holds absolutely: all other slots
- * resolve to the same change cycle they had at `n − 1`, so they cannot differ.
+ * It computed the cycle at which a slot last re-picked its tone, which is what
+ * made "at most one slot differs from one cycle to the next" true by
+ * construction. The rule was sound and the thing it was protecting turned out
+ * not to be worth protecting: eight slots each holding an independently chosen
+ * chord tone do not form a figure however slowly they change, which is what
+ * four ear reports of "nothing to recognise" were describing. The evolution
+ * now comes from the pool turning over under a fixed reading head — see
+ * `patternAt` — so the epoch arithmetic has nothing left to do. The pattern is
+ * still a pure function of absolute time, by the same argument it always was.
  */
-function lastChangeCycle(plan: SessionPlan, slot: number, cycleIndex: number): number {
-  const slots = plan.config.figurationSlots;
-  const residue = changeOrder(plan).indexOf(slot);
-  let candidate = residue + Math.floor((cycleIndex - residue) / slots) * slots;
-  if (candidate > cycleIndex) candidate -= slots;
-  return candidate;
-}
 
 /** The register window the figuration draws from, in MIDI. */
 function registerWindow(
@@ -285,9 +276,48 @@ function maskFor(plan: SessionPlan, form: FormPosition, cycleIndex: number): boo
   return mask;
 }
 
+/**
+ * THE POOL — the stars currently contributing figuration, in a FIXED order.
+ *
+ * Every tone genuinely in the air at `atSeconds` that falls inside the
+ * figuration's register window; the whole sounding set when the window is empty,
+ * because a slot with nothing to play is worse than a slot playing low.
+ *
+ * The ORDER is what matters, and it is deliberately not the order the chord
+ * happens to be built in: sorted by pitch, then by star id to break ties. That
+ * gives the reading head a stable path to walk, so the same pool always yields
+ * the same figure — and when a star sets and another rises, the figure shifts by
+ * one member instead of being reshuffled.
+ */
+function poolAt(plan: SessionPlan, atSeconds: number, registerOffset: number): SoundingTone[] {
+  const register = registerWindow(plan, atSeconds, registerOffset);
+  const all = soundingChordTonesCached(plan, atSeconds);
+  const eligible = all.filter((t) => t.midi >= register.low && t.midi <= register.high);
+  const pool = eligible.length > 0 ? eligible : all;
+  return [...pool].sort(
+    (a, b) => a.midi - b.midi || (a.starId < b.starId ? -1 : a.starId > b.starId ? 1 : 0),
+  );
+}
+
+/**
+ * The pool a listener is hearing at a moment — exported so it can be MEASURED.
+ *
+ * The ostinato's evolution is a claim about how fast this set turns over, and a
+ * claim about the sky should be testable without reading the figuration's
+ * internals.
+ */
+export function figurationPoolAt(plan: SessionPlan, atSeconds: number): SoundingTone[] {
+  const form = formAt(plan.movementPlan, atSeconds);
+  return poolAt(plan, atSeconds, form ? form.movement.registerOffset : 0);
+}
+
+/** The absolute grid step a slot of a cycle lands on. */
+function stepIndexOf(plan: SessionPlan, cycleIndex: number, slot: number): number {
+  return cycleIndex * plan.config.figurationSlots + slot;
+}
+
 export function patternAt(plan: SessionPlan, cycleIndex: number): FigurationSlot[] {
   const slots = plan.config.figurationSlots;
-  const seed = plan.config.seed ?? 1;
   const at = cycleStartSeconds(plan, cycleIndex);
   const form = formAt(plan.movementPlan, at);
 
@@ -298,19 +328,27 @@ export function patternAt(plan: SessionPlan, cycleIndex: number): FigurationSlot
 
   const pattern: FigurationSlot[] = [];
   for (let slot = 0; slot < slots; slot++) {
-    const changed = lastChangeCycle(plan, slot, cycleIndex);
-    const changedAt = Math.max(0, cycleStartSeconds(plan, changed));
+    // SLICE B4 — THE READING HEAD, not a fresh pick.
+    //
+    // A3 gave each slot its own seeded choice out of the pool, re-made at that
+    // slot's change cycle. It satisfied "at most one slot changes per cycle" and
+    // it still produced nothing recognisable, because eight independent random
+    // draws from a set of chord tones do not become a figure however slowly you
+    // change them. The head now walks the pool in its fixed order, one member
+    // per grid step, so the figure is a consequence of the order and repeats
+    // with it — and the pool's own slow turnover is what makes it evolve.
+    //
+    // The pool is read at THIS SLOT'S OWN TIME rather than at a change cycle:
+    // the tone has to be in the air when it sounds, and `lastChangeCycle` exists
+    // now only for whatever still wants A3's change-epoch arithmetic.
+    const stepIndex = stepIndexOf(plan, cycleIndex, slot);
+    const slotAt = Math.max(0, at + slot * plan.config.figurationSlotSeconds);
+    const pool = poolAt(plan, slotAt, registerOffset);
 
-    const register = registerWindow(plan, changedAt, registerOffset);
-    const all = soundingChordTonesCached(plan, changedAt);
-    const eligible = all.filter((t) => t.midi >= register.low && t.midi <= register.high);
-    const pool = eligible.length > 0 ? eligible : all;
-
-    let toneStarId: string | null = null;
-    if (pool.length > 0) {
-      const pick = Math.floor(unit(seed, slot, changed, 3) * pool.length);
-      toneStarId = (pool[Math.min(pick, pool.length - 1)] as SoundingTone).starId;
-    }
+    const toneStarId =
+      pool.length > 0
+        ? (pool[poolIndexAt(stepIndex, pool.length)] as SoundingTone).starId
+        : null;
 
     pattern.push({ slot, toneStarId, active: mask[slot] === true });
   }
@@ -467,7 +505,11 @@ export function figurationNotesInRange(
       if (!tone) continue;
 
       const energy = energyAt(plan, startSeconds);
-      const accent = entry.slot === 0 ? 1.12 : 1;
+      // SLICE B4 — THE ACCENT PATTERN, from the grid. A3 accented the head of
+      // the cycle and nothing else, which is a downbeat without a bar around it.
+      // The pattern is now metric — every 4th step accented, every 2nd
+      // half-accented — and it is stated in `pulse.ts` where the tempo is.
+      const accent = accentAt(stepIndexOf(plan, n, entry.slot));
       const breath = anticipating ? 0.85 : 1;
       const velocity =
         (0.45 + 0.55 * energy) * accent * breath * movementVelocity * seamSwell * arrivalGate;

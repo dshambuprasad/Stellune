@@ -9,9 +9,15 @@
     "is what stops the two from drifting apart.",
     "",
     "Switching lenses must NEVER change pitches or timing — only timbre. Every",
-    "role in every lens therefore covers the same MIDI range; where a lens's",
+    "role a lens DECLARES therefore covers the same MIDI range; where a lens's",
     "first-choice instrument cannot reach a note within `maxShiftSemitones`, the",
     "bank falls through to the next instrument in the list.",
+    "",
+    "SLICE B4: A LENS NEED NOT DECLARE EVERY ROLE. `roles` is the lens's own",
+    "statement of what it is made of, and a role it omits is not scheduled at all.",
+    "Ground is the first bedless lens — handpan notes, no drone under them. The",
+    "invariance rule above still holds for the roles a lens does declare, and the",
+    "mix law's hierarchy margins are asserted only where both stems exist.",
     "",
     "`gainDb` is a per-lens voicing offset applied BEFORE the mix law's stem",
     "trims, so it shapes the blend inside a role without moving the stem target.",
@@ -552,29 +558,8 @@
     "ground": {
       "title": "Ground",
       "homage": "handpan hours",
-      "palette": "handpan and log drum, bowed vibraphone, bells, deep drone — the endless-background lens",
+      "palette": "handpan and log drum, hand chimes — notes only, no bed",
       "roles": {
-        "ground": [
-          {
-            "instrument": "contrabass",
-            "maxShiftSemitones": 7
-          }
-        ],
-        "chord": [
-          {
-            "instrument": "vibraphone-bowed",
-            "maxShiftSemitones": 4
-          },
-          {
-            "instrument": "strings-cello",
-            "maxShiftSemitones": 12
-          },
-          {
-            "instrument": "flute",
-            "maxShiftSemitones": 3,
-            "_why": "high-register cover: B1.1 measured the chain topping out below the register the score reaches, which forced resampling far past the +/-3 cap"
-          }
-        ],
         "figuration": [
           {
             "instrument": "handpan",
@@ -603,49 +588,10 @@
             "instrument": "hand-bells",
             "maxShiftSemitones": 12
           }
-        ],
-        "weather": [
-          {
-            "instrument": "wine-glass",
-            "maxShiftSemitones": 9,
-            "gainDb": -2
-          },
-          {
-            "instrument": "flute",
-            "maxShiftSemitones": 12
-          }
         ]
       },
       "eq": {
-        "_curve": "The endless/background lens: the LEAST carved, because nothing here should demand attention. Handpan and bowls already sit apart.",
-        "ground": {
-          "highpassHz": 34,
-          "lowShelf": {
-            "hz": 125,
-            "db": 1.5
-          },
-          "dip": {
-            "hz": 1300,
-            "db": -3,
-            "q": 0.7
-          },
-          "highShelf": {
-            "hz": 4500,
-            "db": -2.5
-          }
-        },
-        "chord": {
-          "highpassHz": 80,
-          "dip": {
-            "hz": 1700,
-            "db": -3.5,
-            "q": 0.8
-          },
-          "highShelf": {
-            "hz": 5200,
-            "db": -1.5
-          }
-        },
+        "_curve": "The endless/background lens: the LEAST carved, because nothing here should demand attention. Handpan and bowls already sit apart. Since B4 there is no bed to carve a hole in — the lanes for ground, chord and weather are gone with the roles they shaped.",
         "figuration": {
           "highpassHz": 200,
           "lowShelf": {
@@ -668,15 +614,23 @@
             "hz": 3800,
             "db": 1
           }
-        },
-        "weather": {
-          "highpassHz": 600,
-          "highShelf": {
-            "hz": 5000,
-            "db": 0.5
-          }
         }
-      }
+      },
+      "_bedless": [
+        "SLICE B4, 2026-09-11 — THE BEDLESS LENS. Ground declares figuration and lead",
+        "and nothing else: no ground, no chord, no weather. The owner heard the bed as",
+        "'that tuuuuuuuu background sound... very boring noise which I can't listen to",
+        "more than a few seconds', and the bed is what GROUND and CHORD are. A role a",
+        "lens does not declare is NOT SCHEDULED — absent, not silent, not gained to",
+        "zero (scripts/lib/schedule.mjs, declaredRoles).",
+        "",
+        "The harmony is untouched: figuration pitches still come from the chord the sky",
+        "is really sounding (soundingChordTones), so the chord is still COMPUTED. It is",
+        "simply no longer VOICED under the handpan.",
+        "",
+        "The other four lenses keep their beds until this one is right. 'Add layers",
+        "later if required' is the order of work: earn each layer against the ear."
+      ]
     }
   },
   "mastering": {

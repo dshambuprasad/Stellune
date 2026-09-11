@@ -2396,3 +2396,247 @@ sphere, so each varies by construction.
 **SEQUENCE STANDS:** B4 (drone, echo, pulse) is still first and is still
 unbuilt — its brief was issued and only the housekeeping ran. Sound first, then
 variety. Do not combine them: a single ear gate cannot tell which change worked.
+
+---
+
+**◇ SLICE B4 — SIMPLE MUSIC. 2026-09-11 → 09-12. HALTED AT THE EAR GATE.**
+
+Three ratified changes — the echo goes, the bed becomes optional, the rhythm
+becomes composed — plus the honesty line that had to change with them.
+`docs/b4-handpan-110s.mp3` is 110 s of Tonight × Ground from t = 0, arrival
+included, rendered from a score the LIVE mapping wrote
+(`docs/b4-tonight-score.json`, ten minutes of endless mode over Shambu's own
+sky, the same sky every gate since B2 has used).
+
+### 1 · THE ECHO — gone, and the two tables became one
+
+`ROLE_SENDS` in `scripts/lib/mixlaw.mjs` is now the only copy. `render-score.mjs`
+had `SEND` and `src/engine/audio/mixLaw.ts` had `SEND_LEVELS`, the second
+carrying a comment promising it matched the first "to the digit" — the same
+shape of defect B3 found in the master fader, and the same fix: one table, two
+importers, `expect(SEND_LEVELS).toBe(ROLE_SENDS)` rather than `toEqual`.
+
+| role | reverb (was → is) | delay (was → is) |
+|---|---|---|
+| ground | 0.22 → **0.06** | 0.0 → 0.0 |
+| chord | 0.34 → **0.10** | 0.05 → **0.0** |
+| figuration | 0.16 → **0.07** | **0.18 → 0.0** |
+| lead | 0.30 → **0.10** | **0.22 → 0.0** |
+| weather | 0.50 → **0.20** | 0.10 → **0.0** |
+
+The delay field is kept at zero rather than deleted, so turning an echo back on
+is one number and not a re-wire — and so neither path can turn it on alone.
+
+**THE TWO PATHS WERE NOT BUILDING THE SAME ROOM, and nobody could see it**
+because they express a reverb in different units. The offline Schroeder network
+takes a comb FEEDBACK COEFFICIENT (0.84); `Tone.Reverb` takes an RT60 in
+SECONDS, and it was set to **8**. Measured against the comb delays, 0.84 is a
+1.50 s tail: the renderer was in a hall and the live graph was in a cathedral,
+from the same ratified word. So `REVERB.combFeedback` is ratified (0.84 → 0.55,
+dampHz 2400 → 1800) and `reverbDecaySeconds()` DERIVES the seconds from it —
+**0.44 s, a room**. The live graph also gets a lowpass at `dampHz` on its reverb
+return, because the offline tail has always been darkened and the live one never
+was. One number now moves both rooms in the same direction by the same amount.
+
+### 2 · THE BEDLESS LENS — and the mix law became conditional
+
+The Ground lens declares `figuration, lead` and nothing else. No ground, no
+chord, no weather; the "tuuuuuuuu" is not quieter, it is **absent**. The harmony
+is untouched — figuration pitches still come from `soundingChordTones`, so the
+chord is still computed, just no longer voiced.
+
+"Absent" is enforced in `scripts/lib/schedule.mjs` (`declaredRoles`), the one
+function both paths call, so neither has to remember. A role a lens does not
+declare gets no stem in the renderer, no fader, no row in the table, no lane, no
+meter reading and no line in the mix-law report.
+
+**THE MIX LAW IS NOW CONDITIONAL ON DECLARED ROLES — the ratified surface change
+this slice asks HQ to sign.** `figurationOverGround` and `figurationOverChord`
+are margins BETWEEN stems, and a bedless lens has one of the two. Two ways to
+handle that were available and both are refused: a silent skip (a bed could
+vanish from a lens that is supposed to have one and nobody would see it), and a
+divide by a missing stem ("figuration leads ground by Infinity dB", passing).
+Instead every conditional check prints `⊘` and names what is missing:
+
+```
+── ground ──────────────────────────────────────────────
+  declares figuration, lead — no ground, no chord, no weather
+  ✓ figuration  -19.5 dBFS  (target -19, ±1)
+  ✓ lead        -21.3 dBFS  (target -21, ±1)
+  ⊘ figuration leads the bed in every window  not applicable: lens declares no ground and no chord
+  ⊘ figuration over ground  not applicable: lens declares no ground
+  ⊘ figuration over chord   not applicable: lens declares no chord
+  ⊘ lead over chord         not applicable: lens declares no chord
+  ⊘ weather under chord     not applicable: lens declares no weather and no chord
+  ⊘ chord is carved where the motion sings  not applicable: lens declares no chord
+```
+
+The same conditional reasoning reached three other places that had "every lens
+has every role" written into them: `validateLensConfig` (which used to reject a
+lens for the absence that is now the point — it requires figuration and nothing
+else), `validateEqLanes`, and **lens invariance**, which was the interesting
+one. It compared one fingerprint per lens built from the SCORE's events, which
+every lens sees identically — so the check could not fail. It is now built from
+the SCHEDULE, per role, and two lenses are compared on the roles they both
+declare, with the unshared ones named:
+
+```
+  ✓ ground plays the same notes at the same times as aurora in figuration, lead
+      (not compared: ground, chord, weather — not declared by both)
+```
+
+The other four lenses keep their beds, untouched. `e2e/b4-bedless.spec.ts` plays
+Ground in a real browser for 35 s — past the gesture and the figuration entry —
+because a lens missing three of five role chains is exactly the shape that
+throws on a missing key ninety seconds into a session, where no unit test looks.
+
+### 3 · THE PULSE — the sky decides which note, the grid decides when
+
+`src/engine/mapping/pulse.ts` is the whole rhythm, in one object: 66 bpm,
+eighth notes (`STEP_SECONDS` = 0.4545 s), 8 steps to the bar, accent every 4th,
+half-accent every 2nd, one pool member per step, lead quantised to the half-bar,
+`humanizeSeconds: 0`, `swingRatio: 0`. The mapping config reads the grid instead
+of choosing its own tempo, so there is no second opinion about what the tempo is.
+
+Onsets are `stepIndex × STEP_SECONDS` — a pure function of absolute piece time,
+so partition invariance holds by construction rather than by care.
+
+**THE TONE CHOICE IS WHERE THE MUSIC CHANGED.** A3 gave each slot its own seeded
+pick from the sounding chord and its own change epoch, which satisfied "at most
+one slot changes per cycle" and still produced nothing recognisable: eight
+independent draws are not a figure however slowly they move. A reading head now
+walks the pool — every tone in the air inside the figuration's register window,
+ordered by pitch then id — one member per grid step, wrapping. The figure is a
+consequence of the order, so it repeats; the pool turns over at the speed of the
+sky, so it evolves. Measured inside a movement body, a pool carries **>60%** of
+its members from one bar to the next; a seam is allowed to change it wholesale,
+because that is the form speaking.
+
+The first 110 s of the ear-gate score, as pitches:
+
+```
+59 62 64 60 62 · 59 62 64 60 62 · 59 62 64 60 62 · 59 62 64 60 62 · 59 59 62 64 60 62 …
+```
+
+Four pitches, a five-note cycle, recurring for a minute and a half and then
+shifting by one as the sky turns. That is the first ostinato this engine has
+produced in six slices, and it is `MUSICAL_VISION` §6b built rather than
+described. `lastChangeCycle` and `changeOrder` are deleted; the A4 test that
+asserted the ≤1-slot rule is replaced by one that asserts what the rule was
+protecting (pool continuity) and one that asserts the thing the slice is for —
+**a bar of the weave recurs at least three times in 900 s**, which under A3's
+random picks it essentially never did.
+
+**THE LEAD** is snapped to the nearest half-bar (1.818 s) and nothing else: same
+phrases, same degrees, same subjects, same rests. Quantising happens BEFORE the
+window filter, because an event belongs to the window containing the onset it
+will actually carry — testing the raw time and then moving it is how a note gets
+emitted twice or lost between two windows. **The partition-invariance gate caught
+exactly that**: a note belonging to the phrase starting at 2208 s sounded at
+2207.27 s, and the window containing 2207.27 s had not scanned that phrase.
+`phrasesInRange` now looks one period FORWARD as well as back, for the same
+reason it already looked back.
+
+**THE B2 ARRIVAL IS KEPT** — the pulse enters with the figuration, not before.
+
+### 4 · THE HONESTY LINE
+
+"…and a star sounds when it really rises, culminates or sets" was exactly true
+until this slice and is not true now. The panel is not deleted, shortened or
+softened; it says what the engine does:
+
+> The structure is true: these are the real stars above this place at this
+> moment. The sky chooses the notes — which pitches are in the air, how high
+> they sit, how bright they sound — from where those stars actually are. The
+> rhythm is composed: a steady pulse the sky is played over. The instruments,
+> the musical scale and the tempo are artistic choices. This is never a claim
+> about what space literally sounds like.
+
+The same sentence in `index.html`'s meta description went with it, and the Ground
+lens's own description ("Handpan, log drum and hand chimes. Notes, with nothing
+under them.") stopped advertising a drone it no longer has.
+
+### WHAT I AM FLAGGING RATHER THAN FIXING
+
+**(a) THE GRID IS UNDER THE FIGURATION, BUT THE A4 PATTERN VOCABULARY DECIDES
+HOW MUCH OF IT SOUNDS — and over half this score it is one note per bar.**
+The ratified line is "at each step the note is drawn from the pool", which read
+literally means every step sounds. A4's movement patterns are 8-slot masks that
+gate steps to rest, and retiring them would kill a ratified A4 gate (a
+transition RAMPS the note rate monotonically — with every step sounding, the
+note rate is constant and the ramp has nothing to ramp). So the masks stand, and
+this is the result:
+
+| movement | pattern | notes/bar | one note every |
+|---|---|---|---|
+| 0 (the clip) | sparse-low | 1.7 | 1.8 s |
+| 1, 3, 5 | half-time-still | 1.0 | 3.6 s |
+| 2, 4 | mid-weave | 4.0 | 0.9 s |
+
+**The 110 s in the ear gate is movement 0**, the second-densest thing in the
+score. If the clip sounds right and the app later sounds empty, that table is
+why, and the fix is a ruling on the pattern vocabulary — make the masks denser,
+or retire them and re-state A4's ramp in terms of something other than note rate
+— not a tweak. `PULSE.poolAdvancePerStep` is the other dial: at 1 the head walks
+the pool in pitch order, which is a rising run; at 3 it would arpeggiate.
+
+**(b) ON A BEDLESS LENS THE ARRIVAL'S OPENING GESTURE IS SILENCE.** The B2
+arrival gives the bed 18 s alone before the figuration is let in. Ground has no
+bed, so the clip opens with **20.0 s of measured silence** (the first gated
+notes are under −60 dBFS until then). The arrival envelope is on the do-not-touch
+list and I have not touched it. Whether a bedless lens needs its own arrival —
+the first handpan notes ARE the arrival — is a ruling, and the clip lets that
+silence be heard rather than hiding it.
+
+**(c) THE TWO TONIGHT-SCORE FAILURES DEFERRED AT B3 ARE STILL FAILING, and they
+are still the same two.** Sonata's figuration sits −1.1 dB against chord in the
+motion band (was −1.4), and pulse's worst lead window is −7.0 dB against a ±5.5
+bound (was −7.4). Both moved slightly toward passing and neither was tuned. The
+birth score passes all five lenses.
+
+**(d) THE LOUDNESS SPREAD WIDENED, 10.8 → 12.1 dB**, and the drier room is why:
+less reverb energy means a worse crest factor, so the peak ceiling binds harder
+and four of five lenses land further under −18 LUFS (pulse is now −30.1). Ruling
+1 says the ceiling outranks the target and a peak-bound lens may sit under it.
+Reported, not tuned — but 12 dB is past the point where "target" is doing much
+work, and it is worth a ruling of its own.
+
+**(e) FIGURATION'S GLUE AND THE PER-STEM LIMITER ARE BOTH AT THEIR CAPS on the
+bedless lens** — glue 2.00 dB (max 2.00), limiter worst 3.00 dB engaged 7.4% (max
+3.00 / 15%). Inside the law, at the edge of it. A handpan alone is nothing but
+transients, and the law's numbers were set on material with a bed under it.
+
+### HOUSEKEEPING, AND A DEFECT FOUND WHILE DOING IT
+
+B3's PR was already open (**#2**, mergeable); the brief's premise that it had
+none was stale. Its branch carried one uncommitted BUILD_LOG entry (the HQ
+finding of 2026-09-11), now committed and pushed. B4 branched from B3.
+
+**`npm test` was rewriting finished slices' evidence.** `a4ScoreExport.test.ts`
+and `b2ScoreExport.test.ts` write scores into `docs/` as a side effect, so
+running the suite for an unrelated reason replaced A4's and B2's committed
+scores with the current engine's output — both had to be restored from git. So
+did B3's six UX screenshots, which `e2e/b3-ux.spec.ts` re-took the moment the
+suite ran. This is the third instance of one defect: B3 closed it for the
+calibration file ("publication is an act") and for B2's visual gate, and the rule
+had to be remembered each time. All three exports are now gated —
+`A4_SCORE=1`, `B2_SCORE=1`, `B4_SCORE=1`, `B3_SHOT=1` — and in every case the
+ASSERTIONS still run on every push; only the WRITE is deliberate.
+
+### WHAT ELSE IS TRUE
+
+* **439 unit tests green** (425 + 14 new), typecheck clean, production build
+  clean, smoke and the B3 frame gate green in the browser. New files:
+  `src/engine/mapping/pulse.ts`, `test/pulse.test.ts`, `test/b4ScoreExport.test.ts`,
+  `e2e/b4-bedless.spec.ts`.
+* **The live mix was re-measured.** Every B4 change moves what a stem measures,
+  so `calibration.json` from B3 was stale the moment the reverb changed;
+  `npm run calibrate` re-published all five lenses. Ground's entry now carries
+  two faders instead of five, because it has two stems.
+* **`docs/b4-mix-law.json`** (birth, PASS) and **`docs/b4-mix-law-tonight.json`**
+  (tonight, the two deferred failures) are the evidence.
+
+**HALT.** The ear gate is `docs/b4-handpan-110s.mp3`. The question it asks is
+whether handpan notes on a grid, with no bed and no echo, are music he would
+come back to — and (a) and (b) above are the two things I would expect him to
+name if it is not.

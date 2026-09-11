@@ -186,3 +186,80 @@ export function masterTrimDb({ lufsTarget, measuredLufs, measuredPeakDbfs }) {
     : Infinity;
   return Math.min(loudness, peakSafe);
 }
+
+/**
+ * THE SPACE — SLICE B4, 2026-09-11. One place, two paths.
+ *
+ * `render-score.mjs` had a `SEND` table and `src/engine/audio/mixLaw.ts` had a
+ * `SEND_LEVELS` table, written out twice with a comment on the second one
+ * saying "these are SEND in render-score.mjs, to the digit". They were, until
+ * somebody moved a digit. That is the same defect B3 found in the master fader
+ * and closed the same way: the numbers live here, and both paths import them.
+ *
+ * THE ECHO IS GONE. `delay` was 0.18 on figuration and 0.22 on lead — a literal
+ * ping-pong repeat of every note in the two roles that carry the melody. Shambu
+ * heard it as "resound"; it had never been put in front of his ear as a choice.
+ * Ratified 2026-09-11: zero on every role. The field is kept rather than deleted
+ * so that turning an echo back on is one number and not a re-wire, and so the
+ * two paths keep sharing the decision either way.
+ *
+ * THE REVERB IS A ROOM, NOT A HALL. The sends drop by roughly a third across the
+ * board (ground 0.22 → 0.06, chord 0.34 → 0.10, figuration 0.16 → 0.07, lead
+ * 0.30 → 0.10, weather 0.50 → 0.20) and the tail itself shortens. A handpan in a
+ * cathedral is a wash; a handpan in a room is notes.
+ */
+export const ROLE_SENDS = {
+  ground: { reverb: 0.06, delay: 0.0 },
+  chord: { reverb: 0.1, delay: 0.0 },
+  figuration: { reverb: 0.07, delay: 0.0 },
+  lead: { reverb: 0.1, delay: 0.0 },
+  weather: { reverb: 0.2, delay: 0.0 },
+};
+
+/**
+ * THE ROOM ITSELF.
+ *
+ * The offline reverb is a Schroeder network — four combs into two allpasses —
+ * so its "decay" is a comb FEEDBACK COEFFICIENT, while the live graph's
+ * `Tone.Reverb` takes an RT60 in SECONDS. Two different quantities that both
+ * used to be typed in by hand, which is how the renderer ended up at a 1.5 s
+ * tail and the live graph at 8 s from the same ratified word "reverb".
+ *
+ * So the coefficient is ratified here and the seconds are DERIVED from it by
+ * `reverbDecaySeconds()`. Moving `combFeedback` moves both paths at once, in
+ * the same direction, by the same amount.
+ *
+ * decay 0.84 → 0.55 and dampHz 2400 → 1800, ratified 2026-09-11.
+ */
+export const REVERB = {
+  /** Comb feedback. The offline network's `decay`. */
+  combFeedback: 0.55,
+  /** One-pole lowpass on the tail: a bright reverb on a star field is glare. */
+  dampHz: 1800,
+  /** Comb delays, ms — the room's dimensions, and the basis of the RT60 below. */
+  combDelaysMs: [29.7, 37.1, 41.1, 43.7],
+  /** Allpass delays, ms — diffusion, not decay. */
+  allpassMs: [5.0, 1.7],
+  /** Per-comb damping inside the feedback loop. */
+  combDamping: 0.35,
+  /** Right-channel offset, ms: the two channels are not the same room corner. */
+  spreadMs: 0.9,
+  /** Pre-delay, seconds. Live-only; the offline network's first tap is its own. */
+  preDelaySeconds: 0.04,
+};
+
+/**
+ * The RT60 of a comb at `feedback`, in seconds — what the live reverb is set to.
+ *
+ * A comb of delay T with feedback g loses 20·log10(g) dB per pass, so it falls
+ * 60 dB after 3/|log10 g| passes. Averaged over the four comb delays this is the
+ * tail the offline network actually produces: 0.84 → ~1.5 s (a hall), 0.55 →
+ * ~0.44 s (a room). Derived rather than typed so the live graph cannot drift
+ * from the renderer by a factor of five again.
+ */
+export function reverbDecaySeconds(feedback = REVERB.combFeedback) {
+  const g = Math.min(0.999999, Math.max(1e-6, feedback));
+  const meanDelaySeconds =
+    REVERB.combDelaysMs.reduce((a, b) => a + b, 0) / REVERB.combDelaysMs.length / 1000;
+  return (3 * meanDelaySeconds) / -Math.log10(g);
+}

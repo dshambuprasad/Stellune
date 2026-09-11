@@ -32,6 +32,7 @@ import { scaleDegrees, type ScaleName } from './scales.ts';
 import { deriveAllMotifs, type Motif } from './motif.ts';
 import { planMovements, type MovementPlan } from './movement.ts';
 import { arrivalIntensity, arrivalPlanFor, type ArrivalPlan } from './arrival.ts';
+import { PULSE, STEP_SECONDS } from './pulse.ts';
 import type { ArcState, LivingSkyConfig, SkyWeather } from './types.ts';
 
 const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
@@ -85,12 +86,17 @@ export const DEFAULT_LIVING_SKY_CONFIG: LivingSkyConfig = {
   arrivalEntrySeconds: 12,
   arrivalLeadInSeconds: 34,
 
-  figurationSlots: 8,
-  figurationSlotSeconds: 0.55,
+  // SLICE B4 — THE PULSE. The cycle is a BAR and a slot is a grid STEP, both
+  // read from `pulse.ts` rather than chosen here: 8 eighth notes at 66 bpm, so
+  // a cycle is 3.636 s where it used to be an unmetered 4.4. The tempo is one
+  // number in one file, which is what lets an ear report be answered by moving
+  // it. `figurationHumanizeSeconds` is 0 by ratification, not by omission.
+  figurationSlots: PULSE.stepsPerBar,
+  figurationSlotSeconds: STEP_SECONDS,
   figurationMinActive: 1,
   figurationMaxActive: 7,
   figurationGain: 0.42,
-  figurationHumanizeSeconds: 0.018,
+  figurationHumanizeSeconds: PULSE.humanizeSeconds,
   figurationNoteSeconds: 1.6,
   figurationRegisterLowOctave: 1.2,
   figurationRegisterHighOctave: 2.1,

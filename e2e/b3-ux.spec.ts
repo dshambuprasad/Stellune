@@ -24,7 +24,8 @@ import { zoomIn } from './gesture.ts';
  *       picture, because "legible" is a thing a person judges — but the sky is
  *       pinned so the same three southern stars are in the same three places.
  *
- *   npx playwright test b3-ux
+ *   npx playwright test b3-ux              — assert the frame law
+ *   B3_SHOT=1 npx playwright test b3-ux    — …and re-take the committed pictures
  */
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -36,8 +37,27 @@ const BENGALURU = { latitude: 12.9716, longitude: 77.5946 };
 /** The instant every shot is taken at. Identical to B2's. */
 const FROZEN = new Date('2026-09-01T16:30:00Z');
 
+/**
+ * B3's GATE IS CLOSED, AND ITS EVIDENCE IS COMMITTED — Slice B4.
+ *
+ * Exactly the rule B3 wrote for B2's spec, applied to B3's own. This file writes
+ * over `docs/b3-ux-*.png`, the pictures HQ reviewed and ruled on; running the
+ * e2e suite for an unrelated reason (B4 ran it to confirm the longer honesty
+ * text had not shrunk the dome) silently rewrote them with the current build's
+ * layout, and it had to be undone from git a second time. A rule that has to be
+ * remembered is not a rule.
+ *
+ * The ASSERTIONS are the reason to run it, and they still run — the frame law is
+ * checked, the screenshots are simply not re-taken unless asked:
+ *
+ *   B3_SHOT=1 npx playwright test b3-ux
+ */
+const RETAKE = Boolean(process.env.B3_SHOT);
+
 const shot = (page: Page, name: string, project: string): Promise<Buffer> =>
-  page.screenshot({ path: path.join(DOCS, `b3-ux-${name}-${project}.png`) });
+  page.screenshot(
+    RETAKE ? { path: path.join(DOCS, `b3-ux-${name}-${project}.png`) } : {},
+  );
 
 interface DomeGeometry {
   width: number;

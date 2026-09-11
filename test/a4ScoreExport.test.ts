@@ -38,6 +38,24 @@ const BENGALURU: ObserverInput = {
   tzOffsetMinutes: 330,
 };
 
+/**
+ * THE EXPORT IS AN ACT — Slice B4, 2026-09-11.
+ *
+ * This file writes a score into `docs/`, and those scores are the EVIDENCE a
+ * finished slice was judged on. Running `npm test` for an unrelated reason
+ * rewrites them with the current engine's output — B4 did exactly that to
+ * `docs/a4-score.json` and `docs/b2-tonight-score.json`, and both had to be
+ * restored from git. It is the same defect B3 closed twice already: an audition
+ * republishing the live calibration, and an e2e run re-arming a closed visual
+ * gate. Publication is deliberate.
+ *
+ * The ASSERTIONS still run on every push — a broken export still fails the
+ * suite. Only the WRITE is gated:
+ *
+ *   A4_SCORE=1 npx vitest run test/a4ScoreExport.test.ts
+ */
+const WRITE = Boolean(process.env.A4_SCORE);
+
 describe('A4 score export for the HQ audition render', () => {
   it('exports the full birth-sky session and 3 min of endless mode', () => {
     const birthPlan: SessionPlan = prepareSession(catalog, BENGALURU, {});
@@ -87,9 +105,11 @@ describe('A4 score export for the HQ audition render', () => {
         window: endless,
       },
     };
-    writeFileSync(
-      fileURLToPath(new URL('../docs/a4-score.json', import.meta.url)),
-      JSON.stringify(payload),
-    );
+    if (WRITE) {
+      writeFileSync(
+        fileURLToPath(new URL('../docs/a4-score.json', import.meta.url)),
+        JSON.stringify(payload),
+      );
+    }
   });
 });

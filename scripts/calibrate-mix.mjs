@@ -81,10 +81,18 @@ async function main() {
     });
     file = writeCalibration(result);
     const trims = result.trims;
+    // SLICE B4: a lens declares the roles it is made of, and a role it does not
+    // declare has no fader. Printed as "—" rather than as a number, because a
+    // zero here would read as "unity trim" — a role playing at its raw level —
+    // when the truth is that the role is not playing at all.
     console.log(
       `  ${lens.padEnd(10)}` +
         ['ground', 'chord', 'figuration', 'lead', 'weather']
-          .map((r) => `${trims[r] >= 0 ? '+' : ''}${trims[r].toFixed(1)}`.padStart(8))
+          .map((r) =>
+            trims[r] === undefined
+              ? '—'.padStart(8)
+              : `${trims[r] >= 0 ? '+' : ''}${trims[r].toFixed(1)}`.padStart(8),
+          )
           .join('') +
         `${result.rawLufs.toFixed(1).padStart(10)}`,
     );

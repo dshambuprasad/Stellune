@@ -48,6 +48,7 @@ import {
 import { SamplerBank, loadSampleCatalogue } from './samplerBank.ts';
 import {
   LENS_ROLES,
+  rolesDeclaredBy,
   eqLaneFor,
   masteringFor,
   type EqLane,
@@ -63,8 +64,10 @@ import {
 import {
   DEFAULT_CALIBRATION,
   MASTER,
+  REVERB,
   ROLE_SHAPING,
   SEND_LEVELS,
+  reverbDecaySeconds,
   isCalibrated,
   loadCalibration,
   masterTrimDb,
@@ -176,6 +179,8 @@ interface RoleChain {
   highShelf: Tone.Filter;
   /** This role's own space, and the guard under it. */
   reverb: Tone.Reverb | null;
+  /** The tail's darkening, at the same `dampHz` the offline network uses. */
+  reverbDamp: Tone.Filter | null;
   delay: Tone.FeedbackDelay | null;
   sends: Tone.Gain[];
   rumbleGuard: Tone.Filter;
@@ -431,12 +436,35 @@ class ToneSampledStream implements SampledStream {
     // STEM levels and the renderer's stems each carry their own reverb, so a
     // shared return would mean the live graph is mixing — and metering — a
     // different thing from the one the law was written about.
+    //
+    // SLICE B4 — THE SAME ROOM AS THE RENDERER, in the units this graph needs.
+    // The tail is derived from the ratified comb feedback (≈0.44 s, a room)
+    // rather than typed in; it was 8 s here against the renderer's 1.5 s, which
+    // is a hall in one path and a cathedral in the other from the same word.
+    // The tail is darkened at `REVERB.dampHz` — the offline network's one-pole,
+    // built here as a lowpass on the reverb's own output — so neither path is
+    // brighter than the other by an unratified number.
+    //
+    // The DELAY is ratified to zero on every role (the echo goes). The node is
+    // still built when a send is non-zero, so turning one back on is a number in
+    // `mixlaw.mjs` and not a re-wire — and it is built in NEITHER path while
+    // that number is zero.
     const levels = SEND_LEVELS[role];
     const sends: Tone.Gain[] = [];
     let reverb: Tone.Reverb | null = null;
+    let reverbDamp: Tone.Filter | null = null;
     let delay: Tone.FeedbackDelay | null = null;
     if (levels.reverb > 0) {
-      reverb = new Tone.Reverb({ decay: 8, preDelay: 0.04, wet: 1 }).connect(rumbleGuard);
+      reverbDamp = new Tone.Filter({
+        type: 'lowpass',
+        frequency: REVERB.dampHz,
+        rolloff: -12,
+      }).connect(rumbleGuard);
+      reverb = new Tone.Reverb({
+        decay: reverbDecaySeconds(),
+        preDelay: REVERB.preDelaySeconds,
+        wet: 1,
+      }).connect(reverbDamp);
     }
     if (levels.delay > 0) {
       delay = new Tone.FeedbackDelay({ delayTime: 0.42, feedback: 0.28, wet: 1 }).connect(
@@ -477,6 +505,7 @@ class ToneSampledStream implements SampledStream {
       dip,
       highShelf,
       reverb,
+      reverbDamp,
       delay,
       sends,
       rumbleGuard,
@@ -1098,9 +1127,26 @@ class ToneSampledStream implements SampledStream {
     return this.#sources;
   }
 
+  /**
+   * The roles the ACTIVE LENS declares — Slice B4.
+   *
+   * The graph still builds all five chains, because rebuilding one mid-session
+   * to switch lenses is a click and a click is the one thing a calm piece cannot
+   * survive. But only the declared roles are part of the piece: nothing is ever
+   * scheduled into the others (`buildSchedule` drops them), so anything that
+   * REPORTS on the mix must read this rather than the vocabulary, or it will
+   * report a bed that is not playing as a bed at −∞.
+   */
+  #declaredRoles(): VoiceRole[] {
+    const lens = this.#lenses.lenses[this.#lens];
+    return lens ? rolesDeclaredBy(lens) : [...LENS_ROLES];
+  }
+
   getStemLevels(): Record<string, number> {
     const out: Record<string, number> = {};
-    for (const role of LENS_ROLES) {
+    // Only the declared roles. A lens without a bed has no ground stem, and
+    // "−∞ dBFS" is a measurement of something; absence is not.
+    for (const role of this.#declaredRoles()) {
       const value = this.#roles.get(role)?.meter.getValue();
       out[role] = typeof value === 'number' && Number.isFinite(value) ? value : -Infinity;
     }
@@ -1110,7 +1156,7 @@ class ToneSampledStream implements SampledStream {
     // because those chains have no limiter; the rest are reported so the ≤3 dB
     // bound can be watched live rather than only asserted offline.
     let worst = 0;
-    for (const role of LENS_ROLES) {
+    for (const role of this.#declaredRoles()) {
       const limiter = this.#roles.get(role)?.limiter;
       const reduction = limiter ? -limiter.reduction : 0;
       out[`${role}LimiterDb`] = reduction;
@@ -1152,6 +1198,7 @@ class ToneSampledStream implements SampledStream {
     for (const chain of this.#roles.values()) {
       for (const send of chain.sends) send.dispose();
       chain.reverb?.dispose();
+      chain.reverbDamp?.dispose();
       chain.delay?.dispose();
       chain.rumbleGuard.dispose();
       chain.bus.dispose();

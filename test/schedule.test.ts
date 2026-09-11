@@ -20,8 +20,10 @@ import path from 'node:path';
 
 import {
   DEFAULT_ROLE_SHAPING,
+  SCHEDULE_ROLES,
   buildSchedule,
   chooseVoiceFor,
+  declaredRoles,
   concurrencyGains,
   concurrencyGrid,
   shadingTilt,
@@ -55,6 +57,8 @@ const manifest = JSON.parse(
   fs.readFileSync(path.join(ROOT, 'public', 'samples', 'manifest.json'), 'utf8'),
 ) as SampleManifest;
 const LENS_IDS = Object.keys(lenses.lenses);
+/** The mix law's role vocabulary — what a lens may declare, not what it must. */
+const ROLES_IN_LAW = SCHEDULE_ROLES;
 
 /**
  * A slice of the real A3 score.
@@ -98,6 +102,10 @@ describe('the shared schedule', () => {
     // across every lens, role and pitch the score reaches.
     for (const lensId of LENS_IDS) {
       for (const event of events) {
+        // SLICE B4: only the roles this lens declares. Asking either function
+        // for an instrument the lens does not have is not a disagreement between
+        // them — there is nothing to choose.
+        if (!declaredRoles(lenses, lensId).includes(event.role)) continue;
         const midi = voicedMidi(event);
         const a = chooseVoiceFor(lenses, manifest, lensId, event.role, midi);
         const b = chooseVoice(lenses, manifest, lensId, event.role as never, midi);
@@ -168,19 +176,64 @@ describe('the shared schedule', () => {
 
 describe('lens invariance, on the schedule the players actually use', () => {
   const events = scoreEvents();
-  const strip = (s: ScheduledVoice[]): string =>
-    s.map((v) => `${v.role}:${v.sourceId}@${v.startSeconds}+${v.durationSeconds}=${v.midi}`).join('|');
+  /**
+   * SLICE B4 — INVARIANCE IS NOW PER ROLE.
+   *
+   * "A lens changes what a note sounds like, never which note it is" still
+   * holds, but a lens may now decline a role entirely: the Ground lens is
+   * handpan and chimes with no bed. So two lenses are compared on the roles they
+   * BOTH declare, and the roles they do not share are named rather than
+   * silently dropped — a lens quietly losing a role it is supposed to have is
+   * exactly what this test exists to catch.
+   */
+  const stripRole = (s: ScheduledVoice[], role: string): string =>
+    s
+      .filter((v) => v.role === role)
+      .map((v) => `${v.sourceId}@${v.startSeconds}+${v.durationSeconds}=${v.midi}`)
+      .join('|');
 
-  const reference = buildSchedule(events, lenses, manifest, LENS_IDS[0] as string, {
+  const referenceId = LENS_IDS[0] as string;
+  const reference = buildSchedule(events, lenses, manifest, referenceId, {
     roleShaping: ROLE_SHAPING,
   });
 
   for (const lensId of LENS_IDS.slice(1)) {
-    it(`${lensId} plays the same notes at the same times as ${LENS_IDS[0]}`, () => {
+    it(`${lensId} plays the same notes at the same times as ${referenceId}, role for role`, () => {
       const other = buildSchedule(events, lenses, manifest, lensId, { roleShaping: ROLE_SHAPING });
-      expect(strip(other)).toBe(strip(reference));
+      const shared = declaredRoles(lenses, lensId).filter((role) =>
+        declaredRoles(lenses, referenceId).includes(role),
+      );
+      expect(shared.length, `${lensId} shares no role with ${referenceId}`).toBeGreaterThan(0);
+      for (const role of shared) {
+        expect(stripRole(other, role), `${lensId} vs ${referenceId} in ${role}`).toBe(
+          stripRole(reference, role),
+        );
+      }
+      // And a role it does not declare is ABSENT from the schedule — not
+      // present and silent, which is the distinction the whole slice rests on.
+      for (const role of ROLES_IN_LAW) {
+        if (declaredRoles(lenses, lensId).includes(role)) continue;
+        expect(other.filter((v) => v.role === role)).toHaveLength(0);
+      }
     });
   }
+
+  it('THE BEDLESS LENS — ground schedules handpan notes and nothing under them', () => {
+    // The owner's ruling of 2026-09-04, as an assertion. The bed is what he
+    // heard as "that tuuuuuuuu background sound"; GROUND and CHORD are the bed.
+    expect(declaredRoles(lenses, 'ground')).toEqual(['figuration', 'lead']);
+    const schedule = buildSchedule(events, lenses, manifest, 'ground', {
+      roleShaping: ROLE_SHAPING,
+    });
+    expect(schedule.length).toBeGreaterThan(0);
+    for (const role of ['ground', 'chord', 'weather']) {
+      expect(schedule.filter((v) => v.role === role), `${role} is still scheduled`).toHaveLength(0);
+    }
+    // The other four keep theirs until this one is right.
+    for (const lensId of LENS_IDS.filter((id) => id !== 'ground')) {
+      expect(declaredRoles(lenses, lensId), lensId).toEqual([...ROLES_IN_LAW]);
+    }
+  });
 
   it('but really does change the instruments', () => {
     // The invariance above would also be satisfied by a lens selector that did
@@ -194,7 +247,13 @@ describe('lens invariance, on the schedule the players actually use', () => {
   });
 
   it('never lets the register hint be lost in a lens change', () => {
+    let checked = 0;
     for (const lensId of LENS_IDS) {
+      // The unison guard is a rule ABOUT TWO ROLES. A lens with neither has no
+      // unison to avoid; a lens with both must still avoid it.
+      const declared = declaredRoles(lenses, lensId);
+      if (!declared.includes('weather') || !declared.includes('ground')) continue;
+      checked++;
       const schedule = buildSchedule(events, lenses, manifest, lensId, {
         roleShaping: ROLE_SHAPING,
       });
@@ -212,6 +271,7 @@ describe('lens invariance, on the schedule the players actually use', () => {
         }
       }
     }
+    expect(checked, 'no lens declares both ground and weather any more').toBeGreaterThan(0);
   });
 });
 
@@ -366,16 +426,34 @@ describe('THE MASTERING LAW, as configured', () => {
     expect(masterTrimDb({ lufsTarget: -18, measuredLufs: -12.0 })).toBeCloseTo(-6.0, 6);
   });
 
-  it('carves the pads and lifts the moving parts, in every lens', () => {
+  it('carves the pads and lifts the moving parts, in every lens that has pads', () => {
+    let carvedLenses = 0;
     for (const lensId of LENS_IDS) {
       const eq = lenses.lenses[lensId]?.eq;
       expect(eq, `${lensId} has no eq block`).toBeDefined();
-      // The moving parts must sit above the bed...
-      expect(eq?.figuration?.highpassHz ?? 0).toBeGreaterThan(eq?.chord?.highpassHz ?? 0);
-      expect(eq?.lead?.highpassHz ?? 0).toBeGreaterThan(eq?.ground?.highpassHz ?? 0);
-      // ...and the bed must be carved where they sing, not merely turned down.
-      expect(eq?.chord?.dip?.db ?? 0).toBeLessThan(0);
+      const declared = declaredRoles(lenses, lensId);
+      // SLICE B4 — every one of these is a relationship BETWEEN two roles, so
+      // each is asserted only where the lens declares both. A bedless lens does
+      // not fail "the motion sits above the bed"; the sentence has no subject.
+      if (declared.includes('figuration') && declared.includes('chord')) {
+        expect(eq?.figuration?.highpassHz ?? 0).toBeGreaterThan(eq?.chord?.highpassHz ?? 0);
+      }
+      if (declared.includes('lead') && declared.includes('ground')) {
+        expect(eq?.lead?.highpassHz ?? 0).toBeGreaterThan(eq?.ground?.highpassHz ?? 0);
+      }
+      if (declared.includes('chord')) {
+        // ...and the bed must be carved where they sing, not merely turned down.
+        expect(eq?.chord?.dip?.db ?? 0).toBeLessThan(0);
+        carvedLenses++;
+      }
+      // A lens declares no lane for a role it does not play: a lane is a
+      // statement about a stem, and there is no stem.
+      for (const role of ROLES_IN_LAW) {
+        if (declared.includes(role)) continue;
+        expect(eq?.[role as 'chord'], `${lensId} carves a lane for absent ${role}`).toBeUndefined();
+      }
     }
+    expect(carvedLenses, 'no lens carves a chord any more').toBeGreaterThan(0);
   });
 
   it('rejects a lens whose lanes claim separation they do not provide', () => {

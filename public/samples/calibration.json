@@ -2,62 +2,59 @@
   "lenses": {
     "aurora": {
       "stemTrimDb": {
-        "ground": 1.0059093423191854,
-        "chord": -0.18090105540097312,
-        "figuration": 12.525659670850576,
-        "lead": 16.12777211807206,
-        "weather": -4.890551039836527
+        "ground": 2.02331713810527,
+        "chord": 0.972938624399454,
+        "figuration": 13.18243249885661,
+        "lead": 17.083099731376546,
+        "weather": -1.9475223806429227
       },
-      "measuredLufs": -12.46,
-      "measuredPeakDbfs": 1.61,
+      "measuredLufs": -12.4,
+      "measuredPeakDbfs": 1.74,
       "measuredOn": "docs/a3-score.json · birth"
     },
     "embrace": {
       "stemTrimDb": {
-        "ground": 0.9362842840574146,
-        "chord": -2.388098873968705,
-        "figuration": 11.99951974548862,
-        "lead": 24.51564758850592,
-        "weather": -7.197455198229523
+        "ground": 1.9557137530068296,
+        "chord": -1.4909412404996765,
+        "figuration": 12.150086891191734,
+        "lead": 26.511306178889964,
+        "weather": -4.243368462144897
       },
-      "measuredLufs": -13.6,
-      "measuredPeakDbfs": 6.88,
+      "measuredLufs": -13.46,
+      "measuredPeakDbfs": 8.64,
       "measuredOn": "docs/a3-score.json · birth"
     },
     "sonata": {
       "stemTrimDb": {
-        "ground": 0.9567609568304114,
-        "chord": 0.24959707855612123,
-        "figuration": 14.633778492463751,
-        "lead": -0.9934981909812102,
-        "weather": -4.889159217079104
+        "ground": 1.9688157939754802,
+        "chord": 1.1861361608428815,
+        "figuration": 15.029093588662981,
+        "lead": 0.33629723119140564,
+        "weather": -1.94584521151355
       },
-      "measuredLufs": -12.62,
-      "measuredPeakDbfs": 1.59,
+      "measuredLufs": -12.43,
+      "measuredPeakDbfs": 2.19,
       "measuredOn": "docs/a3-score.json · birth"
     },
     "pulse": {
       "stemTrimDb": {
-        "ground": 1.024269355445245,
-        "chord": 8.371653315493642,
-        "figuration": 13.304909444177238,
-        "lead": 19.648429553238078,
-        "weather": -6.588607303124608
+        "ground": 2.0449299809013795,
+        "chord": 9.789327209771827,
+        "figuration": 13.815137561060556,
+        "lead": 21.356227083992053,
+        "weather": -3.661082293270688
       },
-      "measuredLufs": -13.13,
-      "measuredPeakDbfs": 8.66,
+      "measuredLufs": -12.93,
+      "measuredPeakDbfs": 10.38,
       "measuredOn": "docs/a3-score.json · birth"
     },
     "ground": {
       "stemTrimDb": {
-        "ground": 0.924318711976369,
-        "chord": 7.6415408650012395,
-        "figuration": 14.578304845461975,
-        "lead": 21.219424715564976,
-        "weather": -7.515732174302833
+        "figuration": 14.86854422847663,
+        "lead": 23.503513511026032
       },
-      "measuredLufs": -13.22,
-      "measuredPeakDbfs": 4.72,
+      "measuredLufs": -12.73,
+      "measuredPeakDbfs": 6.17,
       "measuredOn": "docs/a3-score.json · birth"
     }
   },

@@ -1,20 +1,17 @@
 /**
- * Slice B2 — the TONIGHT score, exported for the arrival's ear gate.
+ * Slice B4 — the TONIGHT score, exported for the ear gate.
  *
- * `docs/a4-score.json` carries three minutes of endless mode, which was the
- * right length when endless mode had no shape: any three minutes of it were the
- * same three minutes. The arrival changes that. Its ear gate needs two things
- * in one file — the composed opening itself, and enough genuine steady state
- * AFTER it that `render-score.mjs` can calibrate its faders somewhere the
- * arrival is not. Calibrating on a window that is mostly arrival would measure
- * the deliberately-quiet opening and trim it back up, which is precisely the
- * shape the slice exists to put in.
+ * Same shape and same reasoning as `b2ScoreExport.test.ts`, and deliberately the
+ * SAME SKY: Shambu's own, at the same coordinates and date B2's arrival gate was
+ * judged on. The point of the gate is to hear what B4 changed — the echo gone,
+ * the bed gone, a pulse underneath — and a different sky would change the
+ * comparison as well as the engine.
  *
- * So: ten minutes of Tonight over Shambu's own sky, from which the ear gate
- * prints the first 150 seconds and calibrates on t = 200–400 s.
- *
- * Like `a4ScoreExport.test.ts`, this writes a file as a side effect and is a
- * test only in the sense that it refuses to export something broken.
+ * Ten minutes of endless mode with the arrival in it, so the render can print
+ * the opening and still calibrate its faders on a steady state the arrival is
+ * not in. It asserts on every run and WRITES only when asked — see the note on
+ * `WRITE` below, which is this slice closing the side-effect its predecessors
+ * left open.
  */
 
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -22,7 +19,13 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 import { parseStarCatalog, type ObserverInput } from '../src/engine/model/index.ts';
-import { prepareSession, renderWindow } from '../src/engine/mapping/index.ts';
+import {
+  LEAD_QUANTISE_SECONDS,
+  PULSE,
+  STEP_SECONDS,
+  prepareSession,
+  renderWindow,
+} from '../src/engine/mapping/index.ts';
 
 const catalog = parseStarCatalog(
   JSON.parse(
@@ -33,7 +36,7 @@ const catalog = parseStarCatalog(
   ),
 );
 
-/** Shambu's own sky — the one the ear gate is judged on. */
+/** Shambu's own sky — the one every ear gate since B2 has been judged on. */
 const BENGALURU: ObserverInput = {
   latitude: 12.9719,
   longitude: 77.5937,
@@ -58,34 +61,54 @@ const SECONDS = 600;
  * The ASSERTIONS still run on every push — a broken export still fails the
  * suite. Only the WRITE is gated:
  *
- *   B2_SCORE=1 npx vitest run test/b2ScoreExport.test.ts
+ *   B4_SCORE=1 npx vitest run test/b4ScoreExport.test.ts
  */
-const WRITE = Boolean(process.env.B2_SCORE);
+const WRITE = Boolean(process.env.B4_SCORE);
 
-describe('B2 tonight score export — the arrival, plus a steady state to calibrate on', () => {
-  it('exports ten minutes of endless mode with the arrival in it', () => {
+describe('B4 tonight score export — the pulse, the bedless lens, no echo', () => {
+  it('exports ten minutes of endless mode with the arrival and the grid in it', () => {
     const plan = prepareSession(catalog, BENGALURU, { mode: 'endless' });
     const window = renderWindow(plan, 0, SECONDS);
     const arrival = plan.arrival;
 
-    // The export is only useful if the thing being auditioned is actually in it.
     expect(arrival.seconds).toBeGreaterThan(0);
     expect(window.events.length).toBeGreaterThan(100);
 
     const roleFirst = (role: string): number =>
       Math.min(...window.events.filter((e) => e.role === role).map((e) => e.startSeconds));
 
+    // THE B2 ARRIVAL IS KEPT. The pulse enters with the figuration, not before:
+    // the opening gesture is still a sky arriving, and the grid arrives with the
+    // weave that rides it.
     expect(roleFirst('ground')).toBe(0);
     expect(roleFirst('chord')).toBe(0);
     expect(roleFirst('figuration')).toBeGreaterThanOrEqual(arrival.gestureSeconds);
     expect(roleFirst('lead')).toBeGreaterThanOrEqual(arrival.leadInSeconds);
-
-    // And the calibration window the render will use must be past the arrival,
-    // or the faders get set by the opening they are supposed to leave alone.
     expect(arrival.seconds).toBeLessThan(200);
 
+    // THE PULSE IS IN THE FILE, not just in the engine that wrote it.
+    const figuration = window.events.filter((e) => e.role === 'figuration');
+    for (const note of figuration) {
+      const off = note.startSeconds - Math.round(note.startSeconds / STEP_SECONDS) * STEP_SECONDS;
+      expect(Math.abs(off), `figuration at ${note.startSeconds}s is off the grid`).toBeLessThan(1e-3);
+    }
+    const lead = window.events.filter((e) => e.role === 'lead');
+    for (const note of lead) {
+      const off =
+        note.startSeconds -
+        Math.round(note.startSeconds / LEAD_QUANTISE_SECONDS) * LEAD_QUANTISE_SECONDS;
+      expect(Math.abs(off), `lead at ${note.startSeconds}s is off the half-bar`).toBeLessThan(1e-3);
+    }
+
     const payload = {
-      exportedFor: 'Slice B2 ear gate — the arrival (HALT #1)',
+      exportedFor: 'Slice B4 ear gate — simple music (HALT: the echo, the bed, the pulse)',
+      pulse: {
+        bpm: PULSE.bpm,
+        stepSeconds: STEP_SECONDS,
+        stepsPerBar: PULSE.stepsPerBar,
+        leadQuantiseSeconds: LEAD_QUANTISE_SECONDS,
+        humanizeSeconds: PULSE.humanizeSeconds,
+      },
       arrival: {
         seconds: arrival.seconds,
         gestureSeconds: arrival.gestureSeconds,
@@ -112,7 +135,7 @@ describe('B2 tonight score export — the arrival, plus a steady state to calibr
 
     if (WRITE) {
       writeFileSync(
-        fileURLToPath(new URL('../docs/b2-tonight-score.json', import.meta.url)),
+        fileURLToPath(new URL('../docs/b4-tonight-score.json', import.meta.url)),
         `${JSON.stringify(payload, null, 2)}\n`,
       );
     }

@@ -38,6 +38,25 @@
  *
  * Plus a lens-invariance check across all lenses: switching the mood lens must
  * change timbre and nothing else — same pitches, same onsets, same durations.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * SLICE B4, 2026-09-11 — THE MIX LAW IS CONDITIONAL ON DECLARED ROLES.
+ *
+ * The law was written when every lens had every role, and it asserts margins
+ * BETWEEN stems: figuration over ground, figuration over chord, lead over chord,
+ * weather under chord. A lens may now declare no bed at all (the Ground lens is
+ * handpan notes, nothing under them), and those margins are then not failing —
+ * they are NOT APPLICABLE, which is a different thing and must be printed as a
+ * different thing.
+ *
+ * Two failure modes were available here and both are refused. A silent pass
+ * (skip the check, print nothing) would let a bed vanish from a lens that is
+ * supposed to have one and nobody would see it. A divide by a missing stem
+ * (measure −∞ and subtract) would print "figuration leads ground by Infinity dB"
+ * and pass. So every conditional check says out loud which stem is missing and
+ * why it did not run, and the lens-invariance check compares only the roles two
+ * lenses BOTH declare — while naming the ones they do not share.
+ * ─────────────────────────────────────────────────────────────────────────────
  */
 
 import fs from 'node:fs';
@@ -46,7 +65,7 @@ import { fileURLToPath } from 'node:url';
 
 import { render, steadyStateWindow, measureStem, withRegisterHints } from './render-score.mjs';
 import { integratedLufs } from './lib/mastering.mjs';
-import { buildSchedule, MAX_SHIFT_SEMITONES } from './lib/schedule.mjs';
+import { buildSchedule, declaredRoles, MAX_SHIFT_SEMITONES } from './lib/schedule.mjs';
 import { dbToGain } from './lib/audio.mjs';
 import {
   STEM_TARGETS_DBFS,
@@ -89,6 +108,24 @@ const ok = (cond, label, detail) => {
 const margin = (a, b) => a - b;
 
 /**
+ * A check that only applies when the lens declares the stems it is about.
+ *
+ * Prints `⊘` and the reason when it does not apply, and counts as neither a pass
+ * nor a failure. Never silent: "the bed is missing" is exactly the news this
+ * script exists to carry.
+ */
+const okWhen = (roles, required, label, run) => {
+  const missing = required.filter((role) => !roles.includes(role));
+  if (missing.length > 0) {
+    console.log(
+      `  ⊘ ${label}  not applicable: lens declares no ${missing.join(' and no ')}`,
+    );
+    return null;
+  }
+  return run();
+};
+
+/**
  * CHECK 4 — the unison guard, read straight off the score.
  *
  * The A3 score emits ground AND weather on midi 45 for the whole session; that
@@ -119,6 +156,13 @@ function checkUnison(score) {
 
 async function checkLens(lensId, score, lensConfig) {
   console.log(`\n── ${lensId} ${'─'.repeat(52 - lensId.length)}`);
+  // WHAT THIS LENS IS MADE OF. Every loop and every margin below is scoped to
+  // it; a role the lens does not declare has no stem to measure.
+  const roles = declaredRoles(lensConfig, lensId);
+  const absent = ROLES.filter((role) => !roles.includes(role));
+  if (absent.length > 0) {
+    console.log(`  declares ${roles.join(', ')} — no ${absent.join(', no ')}`);
+  }
   const events = score[section].window?.events ?? score[section].events;
   const sectionSeconds = score[section].sessionSeconds ?? score[section].seconds;
   const steady = steadyStateWindow(sectionSeconds);
@@ -141,7 +185,7 @@ async function checkLens(lensId, score, lensConfig) {
 
   // ── 1. stem targets, over the whole steady state ────────────────────────
   console.log('  stem targets (whole steady state):');
-  for (const role of ROLES) {
+  for (const role of roles) {
     const m = full.measured[role];
     ok(
       Math.abs(m - STEM_TARGETS_DBFS[role]) <= STEM_TOLERANCE_DB,
@@ -160,7 +204,7 @@ async function checkLens(lensId, score, lensConfig) {
     const from = Math.round(t * sr);
     const to = Math.round((t + WINDOW_SECONDS) * sr);
     const row = { at: steady.from + t };
-    for (const role of ROLES) {
+    for (const role of roles) {
       const [L, R] = full.stems[role];
       // Gated: within a single minute, what matters is the level the role
       // reaches when it speaks, not how much of the minute it spent silent.
@@ -177,14 +221,14 @@ async function checkLens(lensId, score, lensConfig) {
   // "does this minute drift from how this role normally sounds" — rather than
   // to the ungated target, which would be comparing two different measurements.
   const gatedReference = {};
-  for (const role of ROLES) {
+  for (const role of roles) {
     const [L, R] = full.stems[role];
     gatedReference[role] = measureStem([L, R], { skipFraction: 0, gateDbfs: WINDOW_GATE_DBFS });
   }
 
   console.log(`  the arc — ${windows.length} × ${WINDOW_SECONDS}s windows (gated, vs each role's own gated average):`);
   const drift = {};
-  for (const role of ROLES) {
+  for (const role of roles) {
     let worst = 0;
     let worstAt = null;
     for (const w of windows) {
@@ -210,45 +254,76 @@ async function checkLens(lensId, score, lensConfig) {
     );
   }
 
-  // The law's real invariant, asserted in EVERY window rather than on average.
-  let hierarchyHolds = true;
-  let worstWindow = null;
-  for (const w of windows) {
-    const lead = Math.min(w.figuration - w.ground, w.figuration - w.chord);
-    if (lead <= 0) {
-      hierarchyHolds = false;
-      worstWindow = w.at;
+  // The law's real invariant, asserted in EVERY window rather than on average —
+  // and only against the bed layers this lens actually has. A lens with no bed
+  // has nothing for the figuration to lead, which is not the same as leading it.
+  const beds = ['ground', 'chord'].filter((role) => roles.includes(role));
+  if (beds.length === 0) {
+    console.log(
+      '  ⊘ figuration leads the bed in every window  ' +
+        'not applicable: lens declares no ground and no chord',
+    );
+  } else {
+    let hierarchyHolds = true;
+    let worstWindow = null;
+    for (const w of windows) {
+      const lead = Math.min(...beds.map((bed) => w.figuration - w[bed]));
+      if (lead <= 0) {
+        hierarchyHolds = false;
+        worstWindow = w.at;
+      }
     }
+    ok(
+      hierarchyHolds,
+      `figuration leads ${beds.join(' and ')} in every window`,
+      worstWindow == null ? '' : `(fails at t=${worstWindow}s)`,
+    );
   }
-  ok(
-    hierarchyHolds,
-    'figuration leads both bed layers in every window',
-    worstWindow == null ? '' : `(fails at t=${worstWindow}s)`,
-  );
 
   // ── 3. hierarchy on the average: motion in front, vastness behind ───────
   const s = full.measured;
   console.log('  hierarchy:');
-  const overGround = margin(s.figuration, s.ground);
-  const overChord = margin(s.figuration, s.chord);
-  ok(
-    Math.abs(overGround - FIGURATION_OVER_LAYER_DB.ground) <= FIGURATION_OVER_LAYER_DB.tolerance,
-    `figuration over ground  +${overGround.toFixed(1)} dB`,
-    `(law: +${FIGURATION_OVER_LAYER_DB.ground})`,
+  // SLICE B4 — asserted only where both stems exist. `okWhen` prints why a check
+  // did not run; it never passes one by skipping it.
+  const overGround = roles.includes('ground') ? margin(s.figuration, s.ground) : null;
+  const overChord = roles.includes('chord') ? margin(s.figuration, s.chord) : null;
+  okWhen(roles, ['figuration', 'ground'], 'figuration over ground', () =>
+    ok(
+      Math.abs(overGround - FIGURATION_OVER_LAYER_DB.ground) <= FIGURATION_OVER_LAYER_DB.tolerance,
+      `figuration over ground  +${overGround.toFixed(1)} dB`,
+      `(law: +${FIGURATION_OVER_LAYER_DB.ground})`,
+    ),
   );
-  ok(
-    Math.abs(overChord - FIGURATION_OVER_LAYER_DB.chord) <= FIGURATION_OVER_LAYER_DB.tolerance,
-    `figuration over chord   +${overChord.toFixed(1)} dB`,
-    `(law: +${FIGURATION_OVER_LAYER_DB.chord})`,
+  okWhen(roles, ['figuration', 'chord'], 'figuration over chord', () =>
+    ok(
+      Math.abs(overChord - FIGURATION_OVER_LAYER_DB.chord) <= FIGURATION_OVER_LAYER_DB.tolerance,
+      `figuration over chord   +${overChord.toFixed(1)} dB`,
+      `(law: +${FIGURATION_OVER_LAYER_DB.chord})`,
+    ),
   );
-  ok(s.lead > s.chord, `lead over chord         +${margin(s.lead, s.chord).toFixed(1)} dB`);
-  ok(s.weather < s.chord, `weather under chord     ${margin(s.weather, s.chord).toFixed(1)} dB`);
-  // Reported, not enforced — see the note in lib/mixlaw.mjs.
-  const bed = 10 * Math.log10(10 ** (s.ground / 10) + 10 ** (s.chord / 10));
-  notes.push(
-    `${lensId}: figuration sits ${(s.figuration - bed).toFixed(1)} dB over the POWER-SUMMED bed ` +
-      `(ground+chord = ${bed.toFixed(1)} dBFS); the law's prose says 3–5 dB, its numbers give ~1.9.`,
+  okWhen(roles, ['lead', 'chord'], 'lead over chord', () =>
+    ok(s.lead > s.chord, `lead over chord         +${margin(s.lead, s.chord).toFixed(1)} dB`),
   );
+  okWhen(roles, ['weather', 'chord'], 'weather under chord', () =>
+    ok(s.weather < s.chord, `weather under chord     ${margin(s.weather, s.chord).toFixed(1)} dB`),
+  );
+  // Reported, not enforced — see the note in lib/mixlaw.mjs. A lens with no bed
+  // has no combined bed to sit over, and says so rather than power-summing −∞.
+  let figurationOverCombinedBed = null;
+  if (beds.length > 0) {
+    const bed = 10 * Math.log10(beds.reduce((sum, role) => sum + 10 ** (s[role] / 10), 0));
+    figurationOverCombinedBed = s.figuration - bed;
+    notes.push(
+      `${lensId}: figuration sits ${figurationOverCombinedBed.toFixed(1)} dB over the ` +
+        `POWER-SUMMED bed (${beds.join('+')} = ${bed.toFixed(1)} dBFS); the law's prose says ` +
+        `3–5 dB, its numbers give ~1.9.`,
+    );
+  } else {
+    notes.push(
+      `${lensId}: no combined-bed margin — this lens declares no ground and no chord, so there ` +
+        `is no bed for the figuration to sit over. The margin is not applicable, not zero.`,
+    );
+  }
 
   // ── 5. headroom ─────────────────────────────────────────────────────────
   //
@@ -290,23 +365,29 @@ async function checkLens(lensId, score, lensConfig) {
   const overlap = lensConfig.mastering?.spectralOverlap;
   const motionLead = full.motionLeadDb ?? {};
   for (const pad of ['ground', 'chord']) {
-    const measuredLead = motionLead[pad];
-    ok(
-      Number.isFinite(measuredLead) && measuredLead >= (overlap?.minMotionLeadDb ?? 0),
-      `figuration leads ${pad.padEnd(7)} by ${measuredLead?.toFixed(1)} dB in ` +
-        `${overlap?.figurationBandHz?.[0]}–${overlap?.figurationBandHz?.[1]} Hz`,
-      `(min +${overlap?.minMotionLeadDb ?? 0})`,
-    );
+    okWhen(roles, ['figuration', pad], `figuration leads ${pad} in the motion band`, () => {
+      const measuredLead = motionLead[pad];
+      return ok(
+        Number.isFinite(measuredLead) && measuredLead >= (overlap?.minMotionLeadDb ?? 0),
+        `figuration leads ${pad.padEnd(7)} by ${measuredLead?.toFixed(1)} dB in ` +
+          `${overlap?.figurationBandHz?.[0]}–${overlap?.figurationBandHz?.[1]} Hz`,
+        `(min +${overlap?.minMotionLeadDb ?? 0})`,
+      );
+    });
   }
   // The lanes must also SAY something. A lens with five empty objects would
   // satisfy the measurement above purely on the strength of the mix law's
   // levels, which is exactly the gap the mastering law was written to close.
-  const carve = lane?.chord?.dip;
-  ok(
-    Boolean(carve) && carve.db < 0,
-    `chord is carved where the motion sings`,
-    carve ? `(${carve.db} dB at ${carve.hz} Hz, Q ${carve.q ?? 0.8})` : '(no dip declared)',
-  );
+  // A lens with no chord has no chord to carve, and the carve was only ever
+  // about making room for motion in a pad that is no longer there.
+  okWhen(roles, ['chord'], 'chord is carved where the motion sings', () => {
+    const carve = lane?.chord?.dip;
+    return ok(
+      Boolean(carve) && carve.db < 0,
+      `chord is carved where the motion sings`,
+      carve ? `(${carve.db} dB at ${carve.hz} Hz, Q ${carve.q ?? 0.8})` : '(no dip declared)',
+    );
+  });
 
   // ── 7. glue: gentle, and on figuration alone ────────────────────────────
   const glueLaw = lensConfig.mastering?.figurationGlue;
@@ -373,7 +454,7 @@ async function checkLens(lensId, score, lensConfig) {
   const limiterLaw = lensConfig.mastering?.limiter;
   if (limiterLaw) {
     console.log('  limiter (transient-only, per stem):');
-    for (const role of ROLES) {
+    for (const role of roles) {
       const measured = full.stemLimiting?.[role] ?? { worstDb: 0, engagedFraction: 0 };
       const mustBeSilent = (limiterLaw.zeroEngagementStems ?? []).includes(role);
       if (mustBeSilent) {
@@ -417,14 +498,27 @@ async function checkLens(lensId, score, lensConfig) {
     console.log(`  fallback voicings: ${JSON.stringify(full.substitutions)}`);
   }
 
-  // Lens invariance: the pitches and onsets this lens rendered.
-  const fingerprint = events
-    .filter((e) => ROLES.includes(e.role))
-    .map((e) => `${e.role}:${e.midi}@${e.startSeconds.toFixed(3)}+${e.durationSeconds.toFixed(3)}`)
-    .join('|');
+  // LENS INVARIANCE, PER ROLE (Slice B4).
+  //
+  // "Switching lenses changes timbre and nothing else" was checked with one
+  // string per lens, built from the score's events — which every lens sees
+  // identically, so the check could not fail. Now that a lens may decline a
+  // role, the interesting question is sharper AND actually testable: for every
+  // role two lenses BOTH declare, do they schedule the same pitches at the same
+  // times? So the fingerprint is built from the SCHEDULE, per role, and the
+  // comparison below intersects two lenses' declared roles.
+  const fingerprint = {};
+  for (const role of roles) {
+    fingerprint[role] = schedule
+      .filter((v) => v.role === role)
+      .map((v) => `${v.midi}@${v.startSeconds.toFixed(3)}+${v.durationSeconds.toFixed(3)}`)
+      .join('|');
+  }
 
   return {
     lens: lensId,
+    roles,
+    absentRoles: absent,
     steadyState: full.measured,
     windows,
     drift,
@@ -437,7 +531,7 @@ async function checkLens(lensId, score, lensConfig) {
     substitutions: full.substitutions,
     figurationOverGround: overGround,
     figurationOverChord: overChord,
-    figurationOverCombinedBed: s.figuration - bed,
+    figurationOverCombinedBed,
     motionBandDb: full.motionBandDb,
     stemLimiting: full.stemLimiting,
     farShifts: far.length,
@@ -516,9 +610,24 @@ async function main() {
   console.log('\n── lens invariance ' + '─'.repeat(40));
   const first = results[0];
   for (const r of results.slice(1)) {
+    // Only the roles both lenses declare. A lens that leaves a role out is not
+    // playing different notes in it — it is not playing it, which is a lens
+    // decision the owner ratified and not an invariance failure. What must still
+    // hold, and is asserted here, is that where two lenses DO share a role they
+    // put the same pitches at the same times.
+    const shared = r.roles.filter((role) => first.roles.includes(role));
+    const differing = shared.filter((role) => r.fingerprint[role] !== first.fingerprint[role]);
+    const notShared = [...first.roles, ...r.roles].filter(
+      (role) => !first.roles.includes(role) || !r.roles.includes(role),
+    );
     ok(
-      r.fingerprint === first.fingerprint,
-      `${r.lens} plays the same notes at the same times as ${first.lens}`,
+      differing.length === 0,
+      `${r.lens} plays the same notes at the same times as ${first.lens} in ${shared.join(', ')}`,
+      differing.length > 0
+        ? `(differs in ${differing.join(', ')})`
+        : notShared.length > 0
+          ? `(not compared: ${[...new Set(notShared)].join(', ')} — not declared by both)`
+          : '',
     );
   }
 
