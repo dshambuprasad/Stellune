@@ -2336,3 +2336,63 @@ the sketches ask.
 does not have. The law must become conditional on which roles a lens declares,
 not silently pass or silently divide by a missing stem. That is a real change to
 a ratified surface and it needs its own brief. HALT for the ear.
+
+**◇ HQ FINDING — "IT ALL SOUNDS THE SAME" IS LITERALLY TRUE. 2026-09-11.**
+
+Shambu ruled the product a **companion** (ambient, elating; no keepsake/birthday
+affinity) and said "it all sounds the same right now". HQ tested the claim
+instead of accepting it: eight skies through `prepareSession(mode:'endless')` —
+Bengaluru in August and in February, Tromsø at the winter solstice, Sydney,
+Quito at the equinox, the South Pole, Yokohama tonight, Tandur 1994.
+
+```
+sky              kappa  scale   root  regOct  silence  notes/phr  visible  spread
+bengaluru_aug     30    dorian   45     3      0.4644      2        4378    57.6
+bengaluru_feb     30    dorian   45     3      0.4650      2        4386    57.8
+tromso_winter     30    dorian   45     3      0.4668      2        4255    56.2
+sydney_jun        30    dorian   45     3      0.4626      2        4531    56.3
+quito_mar         30    dorian   45     3      0.4642      2        4423    57.5
+southpole         30    dorian   45     3      0.4618      2        4604    54.2
+yokohama_sep      30    dorian   45     3      0.4665      2        4307    57.3
+tandur_mar        30    dorian   45     3      0.4650      2        4372    57.8
+```
+
+**Every sky on Earth, every date, is A dorian at the same tempo, in the same
+three octaves, at the same density.** Not approximately — identically. The
+silence budget varies by 1%. `midiMin` is 45 in all eight. Pitch-class profiles
+correlate at a mean cosine of 0.80, and Bengaluru-February against Tandur-March
+is 0.98.
+
+**ROOT CAUSE — the law of large numbers is eating the signal.** `measureWeather`
+derives key, register, density and pace from *global aggregates* over the whole
+8,849-star naked-eye catalogue: `visibleCount`, `integratedBrightness`, `spread`,
+`clustering`. But the catalogue is near-uniform on the celestial sphere, so ANY
+half-sky from ANY latitude on ANY date contains essentially the same aggregate:
+visible count moves 8% (4255–4604), spread 6%, clustering 0.203–0.232, and
+`brightestMag` is −1.44 (Sirius) in all eight — including Tromsø in December.
+Aggregates of a uniform field are invariant. The engine is exquisitely
+deterministic and almost completely insensitive. `kappa` compounds it: endless
+mode never solves κ (there is no bloom to solve for), so it is the default 30
+everywhere, and the pace is identical too.
+
+**WHY THIS MATTERS FOR A COMPANION, not just a keepsake.** A gift is heard once,
+so sameness across users is survivable. A companion is returned to nightly, and
+sameness across *nights* is fatal — the same piece in the same key every evening
+is the definition of something you stop opening. The owner's own verdicts —
+"none of the 5 themes touched the heart", "it all sounds the same" — are this
+table, heard.
+
+**WHAT MUST CHANGE (for ratification, not built yet):** the musical decisions
+must come from LOCAL facts that actually move, not global ones that cannot.
+Candidates, all cheap and all already computed elsewhere in the engine: the
+brightest star actually above the horizon at t=0 (its pitch class becomes the
+root — that alone gives ~8 distinct roots across latitudes and seasons); the
+culminating star of the session (mode/scale); observer latitude (register
+centre); the number of bright stars ABOVE THE HORIZON rather than in the
+catalogue (density); and κ solved in endless mode against the night's strongest
+prominence rather than defaulted. Each is a local measurement of a rotating
+sphere, so each varies by construction.
+
+**SEQUENCE STANDS:** B4 (drone, echo, pulse) is still first and is still
+unbuilt — its brief was issued and only the housekeeping ran. Sound first, then
+variety. Do not combine them: a single ear gate cannot tell which change worked.
